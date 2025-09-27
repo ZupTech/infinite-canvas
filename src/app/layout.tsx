@@ -5,6 +5,8 @@ import { focal, hal, halMono, commitMono, inconsolata } from "@/lib/fonts";
 import { BotIdClient } from "botid/client";
 import { Analytics } from "@vercel/analytics/next";
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
 export const metadata: Metadata = {
   title: {
     default: "Flux Kontext Dev - AI Style Transfer | Powered by fal.ai",
@@ -38,7 +40,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL!),
+  metadataBase: appUrl ? new URL(appUrl) : undefined,
   alternates: {
     canonical: "/",
   },

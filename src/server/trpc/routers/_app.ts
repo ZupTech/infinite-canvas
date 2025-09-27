@@ -2,7 +2,19 @@ import { z } from "zod";
 import { rateLimitedProcedure, publicProcedure, router } from "../init";
 import { tracked } from "@trpc/server";
 import { createFalClient } from "@fal-ai/client";
-import sharp from "sharp";
+
+type SharpFunction = typeof import("sharp");
+type SharpModule = SharpFunction & { default: SharpFunction };
+
+let sharpModulePromise: Promise<SharpModule> | undefined;
+
+const getSharp = async (): Promise<SharpFunction> => {
+  if (!sharpModulePromise) {
+    sharpModulePromise = import("sharp") as Promise<SharpModule>;
+  }
+  const loadedSharp = await sharpModulePromise;
+  return loadedSharp.default ?? loadedSharp;
+};
 
 const fal = createFalClient({
   credentials: () => process.env.FAL_KEY as string,
@@ -711,8 +723,9 @@ export const appRouter = router({
         console.log("Applying mask to extract segmented object...");
 
         // Load images with sharp
-        const originalImage = sharp(originalBuffer);
-        const maskImage = sharp(maskBuffer);
+        const sharpLib = await getSharp();
+        const originalImage = sharpLib(originalBuffer);
+        const maskImage = sharpLib(maskBuffer);
 
         // Get metadata to ensure dimensions match
         const [originalMetadata, maskMetadata] = await Promise.all([
@@ -776,7 +789,7 @@ export const appRouter = router({
         }
 
         // Create final image from the buffer
-        const segmentedImage = await sharp(outputBuffer, {
+        const segmentedImage = await sharpLib(outputBuffer, {
           raw: {
             width: rgbaOriginal.info.width,
             height: rgbaOriginal.info.height,
