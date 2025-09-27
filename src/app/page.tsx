@@ -92,7 +92,7 @@ import { SelectionBoxComponent } from "@/components/canvas/SelectionBox";
 import { MiniMap } from "@/components/canvas/MiniMap";
 import { ZoomControls } from "@/components/canvas/ZoomControls";
 import { MobileToolbar } from "@/components/canvas/MobileToolbar";
-import { PoweredByFalBadge } from "@/components/canvas/PoweredByFalBadge";
+import { UniteBadge } from "@/components/canvas/UniteBadge";
 import { CanvasContextMenu } from "@/components/canvas/CanvasContextMenu";
 import { useTheme } from "next-themes";
 import { VideoOverlays } from "@/components/canvas/VideoOverlays";
@@ -3571,7 +3571,7 @@ export default function OverlayPage() {
             canvasSize={canvasSize}
           />
 
-          <PoweredByFalBadge />
+          <UniteBadge />
 
           {/* Dimension display for selected images */}
           <DimensionDisplay
