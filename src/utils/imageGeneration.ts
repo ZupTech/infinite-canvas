@@ -8,7 +8,7 @@ export interface CanvasImage {
   width: number;
   height: number;
   rotation: number;
-  isGenerated: boolean;
+  isGenerated?: boolean;
 }
 
 export interface ViewportInfo {
@@ -24,57 +24,79 @@ export interface CanvasSize {
 
 export const createCanvasImagesFromAssets = (
   assets: GenerationAsset[],
-  placeholderId: string,
+  placeholderIds: string[],
   viewport: ViewportInfo,
   canvasSize: CanvasSize,
-): { updatedPlaceholder: CanvasImage | null; newImages: CanvasImage[] } => {
+): { updatedPlaceholders: CanvasImage[]; newImages: CanvasImage[] } => {
+  console.log("createCanvasImagesFromAssets called with:", {
+    assetsCount: assets.length,
+    placeholderIdsCount: placeholderIds.length,
+    assets: assets.map((a) => a.url),
+    placeholderIds,
+  });
+
   if (assets.length === 0) {
-    return { updatedPlaceholder: null, newImages: [] };
+    return { updatedPlaceholders: [], newImages: [] };
   }
 
   const baseSize = 512;
   const viewportCenterX = (canvasSize.width / 2 - viewport.x) / viewport.scale;
   const viewportCenterY = (canvasSize.height / 2 - viewport.y) / viewport.scale;
 
-  const [firstAsset, ...remainingAssets] = assets;
+  const updatedPlaceholders: CanvasImage[] = [];
+  const newImages: CanvasImage[] = [];
 
-  // Create updated placeholder
-  const updatedPlaceholder: CanvasImage = {
-    id: placeholderId,
-    src: firstAsset.url,
-    x: viewportCenterX - baseSize / 2,
-    y: viewportCenterY - baseSize / 2,
-    width:
-      firstAsset.width && firstAsset.width > 0
-        ? Math.min(firstAsset.width, 1024)
-        : baseSize,
-    height:
-      firstAsset.height && firstAsset.height > 0
-        ? Math.min(firstAsset.height, 1024)
-        : baseSize,
-    rotation: 0,
-    isGenerated: true,
-  };
+  assets.forEach((asset, index) => {
+    const offset = index * 20; // Offset each image slightly
+    const x = viewportCenterX - baseSize / 2 + offset;
+    const y = viewportCenterY - baseSize / 2 + offset;
 
-  // Create new images for remaining assets
-  const newImages: CanvasImage[] = remainingAssets.map((asset, index) => {
-    const offset = (index + 1) * 20; // Offset each image slightly
+    const width =
+      asset.width && asset.width > 0 ? Math.min(asset.width, 1024) : baseSize;
+    const height =
+      asset.height && asset.height > 0
+        ? Math.min(asset.height, 1024)
+        : baseSize;
 
-    return {
-      id: `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${index + 1}`,
+    const imageData: CanvasImage = {
       src: asset.url,
-      x: viewportCenterX - baseSize / 2 + offset,
-      y: viewportCenterY - baseSize / 2 + offset,
-      width:
-        asset.width && asset.width > 0 ? Math.min(asset.width, 1024) : baseSize,
-      height:
-        asset.height && asset.height > 0
-          ? Math.min(asset.height, 1024)
-          : baseSize,
+      x,
+      y,
+      width,
+      height,
       rotation: 0,
       isGenerated: true,
+      id: "", // Will be set below
     };
+
+    // If we have a corresponding placeholder, update it
+    if (index < placeholderIds.length) {
+      console.log(
+        `Asset ${index} -> Updating placeholder ${placeholderIds[index]}`,
+      );
+      updatedPlaceholders.push({
+        ...imageData,
+        id: placeholderIds[index],
+      });
+    } else {
+      console.log(
+        `Asset ${index} -> Creating new image (no placeholder available)`,
+      );
+      // Create new image for extra assets
+      newImages.push({
+        ...imageData,
+        id: `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${index}`,
+      });
+    }
   });
 
-  return { updatedPlaceholder, newImages };
+  console.log("Final result:", {
+    updatedPlaceholders: updatedPlaceholders.map((p) => ({
+      id: p.id,
+      src: p.src,
+    })),
+    newImages: newImages.map((i) => ({ id: i.id, src: i.src })),
+  });
+
+  return { updatedPlaceholders, newImages };
 };

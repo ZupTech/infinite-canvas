@@ -802,7 +802,7 @@ export const appRouter = router({
         // Upload the segmented image to FAL storage
         console.log("Uploading segmented image to storage...");
         const uploadResult = await falClient.storage.upload(
-          new Blob([segmentedImage], { type: "image/png" }),
+          new Blob([new Uint8Array(segmentedImage)], { type: "image/png" }),
         );
 
         // Return the URL of the segmented object
@@ -858,6 +858,11 @@ export const appRouter = router({
             "portrait_16_9",
           ])
           .optional(),
+        parameters: z
+          .object({
+            num_images: z.number().optional(),
+          })
+          .optional(),
         apiKey: z.string().optional(),
       }),
     )
@@ -875,7 +880,10 @@ export const appRouter = router({
               image_size: input.imageSize || "square",
               num_inference_steps: 30,
               guidance_scale: 2.5,
-              num_images: 1,
+              num_images: Math.max(
+                1,
+                Math.min(4, Number(input.parameters?.num_images ?? 1)),
+              ),
               enable_safety_checker: true,
               output_format: "png",
               seed: input.seed,
@@ -912,6 +920,11 @@ export const appRouter = router({
         loraUrl: z.string().url().optional(),
         seed: z.number().optional(),
         lastEventId: z.string().optional(),
+        parameters: z
+          .object({
+            num_images: z.number().optional(),
+          })
+          .optional(),
         apiKey: z.string().optional(),
       }),
     )
@@ -931,7 +944,10 @@ export const appRouter = router({
             prompt: input.prompt,
             num_inference_steps: 30,
             guidance_scale: 2.5,
-            num_images: 1,
+            num_images: Math.max(
+              1,
+              Math.min(4, Number(input.parameters?.num_images ?? 1)),
+            ),
             enable_safety_checker: true,
             resolution_mode: "match_input",
             seed: input.seed,
