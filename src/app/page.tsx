@@ -1,7 +1,12 @@
 "use client";
 
-import React from "react";
-import { useState, useCallback } from "react";
+import React, {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+} from "react";
 import { Stage, Layer, Rect, Group, Line } from "react-konva";
 import Konva from "konva";
 import { canvasStorage, type CanvasState } from "@/lib/storage";
@@ -30,7 +35,6 @@ import { cn } from "@/lib/utils";
 import { Logo, SpinnerIcon } from "@/components/icons";
 import { useTRPC } from "@/trpc/client";
 import { useMutation } from "@tanstack/react-query";
-import { useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -48,7 +52,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { styleModels } from "@/lib/models";
 import { useToast } from "@/hooks/use-toast";
 import { createFalClient } from "@fal-ai/client";
 
@@ -97,14 +100,9 @@ import { CanvasContextMenu } from "@/components/canvas/CanvasContextMenu";
 import { useTheme } from "next-themes";
 import { VideoOverlays } from "@/components/canvas/VideoOverlays";
 import { DimensionDisplay } from "@/components/canvas/DimensionDisplay";
-import Image from "next/image";
 
 // Import handlers
-import {
-  handleRun as handleRunHandler,
-  uploadImageDirect,
-  generateImage,
-} from "@/lib/handlers/generation-handler";
+import { uploadImageDirect } from "@/lib/handlers/generation-handler";
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
 import {
   Select,
@@ -116,6 +114,57 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { GenerationsIndicator } from "@/components/generations-indicator";
 
+type MediaModelType = "image" | "video" | "upscale" | "audio" | "text";
+
+interface MediaModel {
+  id: string;
+  name: string;
+  description?: string;
+  provider?: string;
+  type: string;
+  category?: string | null;
+  visible: boolean;
+  featured?: boolean;
+  isNew?: boolean;
+  hasUnlimitedBadge?: boolean;
+  modelId?: string | null;
+  restricted?: boolean | null;
+  ui?: {
+    icon?: string | null;
+    color?: string | null;
+    layout?: string | null;
+    image?: string | null;
+    resolution?: string | null;
+  };
+  [key: string]: any;
+}
+
+interface ModelsResponse {
+  ui?: Record<string, unknown>;
+  models?: MediaModel[];
+}
+
+const DISPLAYABLE_MODEL_TYPES = ["image", "video", "audio", "upscale"] as const;
+
+type DisplayableModelType = (typeof DISPLAYABLE_MODEL_TYPES)[number];
+
+const isRenderableMediaUrl = (value?: string | null) =>
+  typeof value === "string" &&
+  (value.startsWith("http") || value.startsWith("/"));
+
+const isVideoAsset = (value?: string | null) =>
+  typeof value === "string" && /\.webm($|\?)/i.test(value);
+
+const isDisplayableType = (type?: string): type is DisplayableModelType => {
+  if (!type) {
+    return false;
+  }
+
+  return DISPLAYABLE_MODEL_TYPES.includes(
+    type.toLowerCase() as DisplayableModelType,
+  );
+};
+
 export default function OverlayPage() {
   const { theme, setTheme } = useTheme();
   const [images, setImages] = useState<PlacedImage[]>([]);
@@ -125,18 +174,17 @@ export default function OverlayPage() {
   const [visibleIndicators, setVisibleIndicators] = useState<Set<string>>(
     new Set(),
   );
-  const simpsonsStyle = styleModels.find((m) => m.id === "simpsons");
   const { toast } = useToast();
 
   const [generationSettings, setGenerationSettings] =
     useState<GenerationSettings>({
-      prompt: simpsonsStyle?.prompt || "",
-      loraUrl: simpsonsStyle?.loraUrl || "",
-      styleId: simpsonsStyle?.id || "simpsons",
+      prompt: "",
+      loraUrl: "",
     });
-  const [previousStyleId, setPreviousStyleId] = useState<string>(
-    simpsonsStyle?.id || "simpsons",
-  );
+  const [previousStyleId, setPreviousStyleId] = useState<string | null>(null);
+  const [mediaModels, setMediaModels] = useState<MediaModel[]>([]);
+  const [isModelsLoading, setIsModelsLoading] = useState(true);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeGenerations, setActiveGenerations] = useState<
     Map<string, ActiveGeneration>
@@ -779,10 +827,6 @@ export default function OverlayPage() {
     trpc.isolateObject.mutationOptions(),
   );
 
-  const { mutateAsync: generateTextToImage } = useMutation(
-    trpc.generateTextToImage.mutationOptions(),
-  );
-
   // Save current state to storage
   const saveToStorage = useCallback(async () => {
     try {
@@ -961,6 +1005,128 @@ export default function OverlayPage() {
   useEffect(() => {
     localStorage.setItem("showMinimap", showMinimap.toString());
   }, [showMinimap]);
+
+  // Fetch available media models from the current domain
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchModels = async () => {
+      try {
+        setIsModelsLoading(true);
+        setModelsError(null);
+
+        const endpoint = "/api/models";
+
+        const response = await fetch(endpoint, {
+          headers: {
+            Accept: "application/json",
+          },
+          credentials: "include",
+        });
+
+        const contentType = response.headers.get("content-type") ?? "";
+        let data: ModelsResponse | null = null;
+
+        if (contentType.includes("application/json")) {
+          data = (await response.json()) as ModelsResponse;
+        } else {
+          const body = await response.text().catch(() => "");
+          throw new Error(
+            body
+              ? `Unexpected response when loading models: ${body.slice(0, 120)}`
+              : "Unexpected response when loading models.",
+          );
+        }
+
+        if (!response.ok) {
+          const message =
+            (data as any)?.message ||
+            (data as any)?.error ||
+            `Failed to fetch models (${response.status})`;
+          throw new Error(message);
+        }
+
+        if (!data) {
+          throw new Error("Failed to parse models response.");
+        }
+
+        const candidates = Array.isArray(data.models) ? data.models : [];
+
+        const visibleModels = candidates
+          .filter((model): model is MediaModel => Boolean(model?.id))
+          .map((model) => ({
+            ...model,
+            type: (model.type ?? "").toString().toLowerCase(),
+          }))
+          .filter((model) => model.visible && isDisplayableType(model.type));
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMediaModels(visibleModels);
+
+        if (visibleModels.length > 0) {
+          const preferredModel =
+            visibleModels.find((model) => model.featured) || visibleModels[0];
+
+          setGenerationSettings((prev) => {
+            if (prev.styleId && prev.styleId !== "custom") {
+              return prev;
+            }
+
+            return {
+              ...prev,
+              styleId: preferredModel.id,
+            };
+          });
+
+          setPreviousStyleId((prev) => prev ?? preferredModel.id);
+        }
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        console.error("Failed to load models", error);
+        setModelsError(
+          error instanceof Error ? error.message : "Failed to load models",
+        );
+      } finally {
+        if (isMounted) {
+          setIsModelsLoading(false);
+        }
+      }
+    };
+
+    void fetchModels();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [setGenerationSettings]);
+
+  const selectedMediaModel = useMemo(() => {
+    if (
+      !generationSettings.styleId ||
+      generationSettings.styleId === "custom"
+    ) {
+      return null;
+    }
+
+    return (
+      mediaModels.find((model) => model.id === generationSettings.styleId) ??
+      null
+    );
+  }, [generationSettings.styleId, mediaModels]);
+
+  const displayMediaModel = useMemo(() => {
+    if (selectedMediaModel) {
+      return selectedMediaModel;
+    }
+
+    return mediaModels[0] ?? null;
+  }, [selectedMediaModel, mediaModels]);
 
   // Track previous style when changing styles (but not when reverting from custom)
   useEffect(() => {
@@ -1707,24 +1873,292 @@ export default function OverlayPage() {
   // Users can now manually combine images via the context menu before running generation
 
   // Handle context menu actions
-  const handleRun = async () => {
-    await handleRunHandler({
-      images,
-      selectedIds,
-      generationSettings,
-      customApiKey,
-      canvasSize,
-      viewport,
-      falClient,
-      setImages,
-      setSelectedIds,
-      setActiveGenerations,
-      setIsGenerating,
-      setIsApiKeyDialogOpen,
-      toast,
-      generateTextToImage,
+  const extractJobAsset = useCallback((job: any) => {
+    const result =
+      job?.result ||
+      job?.output?.result ||
+      job?.output?.data?.result ||
+      job?.output?.output?.result;
+    if (!result) {
+      return null;
+    }
+
+    if (result.r2OriginalUrl || result.r2_thumbnail_url) {
+      return {
+        url: (result.r2OriginalUrl || result.r2_thumbnail_url) as string,
+        width: result.metadata?.width,
+        height: result.metadata?.height,
+      };
+    }
+
+    if (result.url) {
+      return {
+        url: result.url as string,
+        width: result.metadata?.width,
+        height: result.metadata?.height,
+      };
+    }
+
+    if (Array.isArray(result.images) && result.images.length > 0) {
+      const asset =
+        result.images.find((img: any) => img.r2OriginalUrl || img.url) ||
+        result.images[0];
+      return {
+        url: (asset.r2OriginalUrl ||
+          asset.r2_thumbnail_url ||
+          asset.url) as string,
+        width: asset.metadata?.width ?? result.metadata?.width,
+        height: asset.metadata?.height ?? result.metadata?.height,
+      };
+    }
+
+    return null;
+  }, []);
+
+  const handleRun = useCallback(async () => {
+    const prompt = generationSettings.prompt.trim();
+
+    if (!prompt) {
+      toast({
+        title: "Prompt required",
+        description: "Please enter a prompt before generating",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Prefer explicitly selected model, otherwise fall back to previously selected/display model
+    const resolvedModelId = (() => {
+      if (
+        generationSettings.styleId &&
+        generationSettings.styleId !== "custom"
+      ) {
+        return generationSettings.styleId;
+      }
+      if (generationSettings.styleId === "custom" && previousStyleId) {
+        return previousStyleId;
+      }
+      return displayMediaModel?.id;
+    })();
+
+    const targetModel =
+      mediaModels.find((model) => model.id === resolvedModelId) ||
+      displayMediaModel;
+
+    if (!targetModel) {
+      toast({
+        title: "Select a model",
+        description: "Choose a model from the catalog before generating",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (targetModel.type !== "image") {
+      toast({
+        title: "Unsupported model",
+        description: "Only image models are supported in the canvas right now.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (selectedIds.length > 0) {
+      toast({
+        title: "Image style transfer not yet supported",
+        description:
+          "Applying a model to existing images will be available soon. Deselect images to run a prompt-only generation.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsGenerating(true);
+
+    const placeholderId = `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const baseSize = 512;
+    const viewportCenterX =
+      (canvasSize.width / 2 - viewport.x) / viewport.scale;
+    const viewportCenterY =
+      (canvasSize.height / 2 - viewport.y) / viewport.scale;
+
+    setImages((prev) => [
+      ...prev,
+      {
+        id: placeholderId,
+        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        x: viewportCenterX - baseSize / 2,
+        y: viewportCenterY - baseSize / 2,
+        width: baseSize,
+        height: baseSize,
+        rotation: 0,
+        isGenerated: true,
+      },
+    ]);
+    setSelectedIds([placeholderId]);
+
+    const parameters: Record<string, any> = {
+      prompt,
+    };
+
+    if (generationSettings.loraUrl) {
+      parameters.loraUrl = generationSettings.loraUrl;
+    }
+
+    if (generationSettings.styleId && generationSettings.styleId !== "custom") {
+      parameters.styleId = generationSettings.styleId;
+    }
+
+    setActiveGenerations((prev) => {
+      const next = new Map(prev);
+      next.set(placeholderId, {
+        prompt,
+        loraUrl: generationSettings.loraUrl,
+        modelId: targetModel.id,
+        parameters,
+        status: "queued",
+        createdAt: Date.now(),
+      });
+      return next;
     });
-  };
+
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: targetModel.id,
+          parameters,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText ||
+            `Generation request failed with status ${response.status}`,
+        );
+      }
+
+      const payload = await response.json();
+      const job = payload.job;
+      const realtime = payload.realtime ?? {};
+
+      if (!job) {
+        throw new Error("Generation response did not include job details.");
+      }
+
+      const runId = job.runId || realtime.runId || job.id;
+      const status = job.status ?? "queued";
+
+      setActiveGenerations((prev) => {
+        const existing = prev.get(placeholderId);
+        if (!existing) {
+          return prev;
+        }
+
+        const next = new Map(prev);
+        next.set(placeholderId, {
+          ...existing,
+          jobId: job.id,
+          runId,
+          status,
+          realtimeToken: realtime.token ?? null,
+          resultUrl: extractJobAsset(job)?.url ?? existing.resultUrl,
+        });
+        return next;
+      });
+
+      if (status === "completed") {
+        const asset = extractJobAsset(job);
+        if (!asset?.url) {
+          throw new Error("Generation completed but no output was returned.");
+        }
+
+        setImages((prev) =>
+          prev.map((img) =>
+            img.id === placeholderId
+              ? {
+                  ...img,
+                  src: asset.url,
+                  width:
+                    asset.width && asset.width > 0
+                      ? Math.min(asset.width, 1024)
+                      : img.width,
+                  height:
+                    asset.height && asset.height > 0
+                      ? Math.min(asset.height, 1024)
+                      : img.height,
+                }
+              : img,
+          ),
+        );
+
+        setActiveGenerations((prev) => {
+          const next = new Map(prev);
+          next.delete(placeholderId);
+          return next;
+        });
+        setIsGenerating(false);
+        setTimeout(() => saveToStorage(), 100);
+      } else if (!runId) {
+        throw new Error(
+          "Generation response did not include a run identifier.",
+        );
+      } else {
+        toast({
+          title: "Generation started",
+          description:
+            "Hang tight, we will add the result to the canvas automatically.",
+        });
+      }
+    } catch (error) {
+      console.error("Failed to start generation:", error);
+
+      const message =
+        error instanceof Error
+          ? error.message || "Failed to start generation"
+          : "Failed to start generation";
+
+      setImages((prev) => prev.filter((img) => img.id !== placeholderId));
+      setActiveGenerations((prev) => {
+        const next = new Map(prev);
+        next.delete(placeholderId);
+        return next;
+      });
+      setIsGenerating(false);
+
+      toast({
+        title: "Generation failed",
+        description: message,
+        variant: "destructive",
+      });
+    }
+  }, [
+    canvasSize.height,
+    canvasSize.width,
+    displayMediaModel,
+    extractJobAsset,
+    generationSettings.loraUrl,
+    generationSettings.prompt,
+    generationSettings.styleId,
+    mediaModels,
+    previousStyleId,
+    saveToStorage,
+    selectedIds,
+    setActiveGenerations,
+    setImages,
+    setSelectedIds,
+    setIsGenerating,
+    toast,
+    viewport.x,
+    viewport.y,
+    viewport.scale,
+  ]);
 
   const handleDelete = () => {
     // Save to history before deleting
@@ -2548,24 +2982,50 @@ export default function OverlayPage() {
           key={imageId}
           imageId={imageId}
           generation={generation}
-          apiKey={customApiKey}
-          onStreamingUpdate={(id, url) => {
-            setImages((prev) =>
-              prev.map((img) => (img.id === id ? { ...img, src: url } : img)),
-            );
+          onStatus={(id, status, job) => {
+            setActiveGenerations((prev) => {
+              const existing = prev.get(id);
+              if (!existing) {
+                return prev;
+              }
+
+              const next = new Map(prev);
+              next.set(id, {
+                ...existing,
+                status,
+                jobId: job?.id,
+                runId: job?.runId ?? existing.runId,
+              });
+              return next;
+            });
           }}
-          onComplete={(id, finalUrl) => {
+          onComplete={(id, finalUrl, payload) => {
             setImages((prev) =>
               prev.map((img) =>
-                img.id === id ? { ...img, src: finalUrl } : img,
+                img.id === id
+                  ? {
+                      ...img,
+                      src: finalUrl,
+                      width:
+                        payload?.asset?.width && payload.asset.width > 0
+                          ? Math.min(payload.asset.width, 1024)
+                          : img.width,
+                      height:
+                        payload?.asset?.height && payload.asset.height > 0
+                          ? Math.min(payload.asset.height, 1024)
+                          : img.height,
+                    }
+                  : img,
               ),
             );
             setActiveGenerations((prev) => {
               const newMap = new Map(prev);
               newMap.delete(id);
+              if (newMap.size === 0) {
+                setIsGenerating(false);
+              }
               return newMap;
             });
-            setIsGenerating(false);
 
             // Immediately save after generation completes
             setTimeout(() => {
@@ -2579,9 +3039,11 @@ export default function OverlayPage() {
             setActiveGenerations((prev) => {
               const newMap = new Map(prev);
               newMap.delete(id);
+              if (newMap.size === 0) {
+                setIsGenerating(false);
+              }
               return newMap;
             });
-            setIsGenerating(false);
             toast({
               title: "Generation failed",
               description: error.toString(),
@@ -3347,17 +3809,16 @@ export default function OverlayPage() {
                         className="flex items-center gap-2"
                         onClick={() => {
                           // Find the previous style to restore its settings
-                          const prevStyle = styleModels.find(
+                          const prevModel = mediaModels.find(
                             (model) => model.id === previousStyleId,
                           );
 
-                          if (prevStyle) {
-                            setGenerationSettings({
-                              ...generationSettings,
-                              styleId: prevStyle.id,
-                              prompt: prevStyle.prompt,
-                              loraUrl: prevStyle.loraUrl || "",
-                            });
+                          if (prevModel) {
+                            setGenerationSettings((prev) => ({
+                              ...prev,
+                              styleId: prevModel.id,
+                              loraUrl: "",
+                            }));
                           }
                         }}
                         title="Go back to previous style"
@@ -3387,20 +3848,72 @@ export default function OverlayPage() {
                           </>
                         );
                       }
-                      const selectedModel =
-                        styleModels.find(
-                          (m) => m.id === generationSettings.styleId,
-                        ) || styleModels.find((m) => m.id === "simpsons");
+                      if (isModelsLoading) {
+                        return (
+                          <>
+                            <SpinnerIcon className="h-4 w-4 animate-spin" />
+                            <span className="text-sm">Loading models...</span>
+                          </>
+                        );
+                      }
+
+                      if (modelsError) {
+                        return (
+                          <>
+                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-destructive/20 text-[10px] font-medium uppercase text-destructive">
+                              !
+                            </div>
+                            <span className="text-sm">
+                              Failed to load models
+                            </span>
+                          </>
+                        );
+                      }
+
+                      const model = displayMediaModel;
+
+                      if (!model) {
+                        return (
+                          <>
+                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-muted text-[10px] font-medium uppercase text-muted-foreground">
+                              N/A
+                            </div>
+                            <span className="text-sm">Select a model</span>
+                          </>
+                        );
+                      }
+
+                      const artwork = model.ui?.image || model.ui?.icon;
+                      const shouldRenderArtwork = isRenderableMediaUrl(artwork);
+                      const artworkUrl = shouldRenderArtwork
+                        ? (artwork as string)
+                        : "";
+
                       return (
                         <>
-                          <img
-                            src={selectedModel?.imageSrc}
-                            alt={selectedModel?.name}
-                            className="w-5 h-5 rounded-xl object-cover"
-                          />
-                          <span className="text-sm">
-                            {selectedModel?.name || "Simpsons Style"}
-                          </span>
+                          {shouldRenderArtwork ? (
+                            isVideoAsset(artworkUrl) ? (
+                              <video
+                                src={artworkUrl}
+                                className="w-5 h-5 rounded-xl object-cover"
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                              />
+                            ) : (
+                              <img
+                                src={artworkUrl}
+                                alt={model.name}
+                                className="w-5 h-5 rounded-xl object-cover"
+                              />
+                            )
+                          ) : (
+                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-muted text-[10px] font-medium uppercase text-muted-foreground">
+                              {model.name.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <span className="text-sm">{model.name}</span>
                         </>
                       );
                     })()}
@@ -3573,13 +4086,14 @@ export default function OverlayPage() {
 
           <PoweredByUniteBadge />
 
-          {/* Dimension display for selected images */}
-          <DimensionDisplay
-            selectedImages={images.filter((img) =>
-              selectedIds.includes(img.id),
-            )}
-            viewport={viewport}
-          />
+          {images.length > 0 && (
+            <DimensionDisplay
+              selectedImages={images.filter((img) =>
+                selectedIds.includes(img.id),
+              )}
+              viewport={viewport}
+            />
+          )}
         </div>
       </main>
 
@@ -3605,12 +4119,12 @@ export default function OverlayPage() {
                 {/* Custom option */}
                 <button
                   onClick={() => {
-                    setGenerationSettings({
-                      ...generationSettings,
+                    setGenerationSettings((prev) => ({
+                      ...prev,
                       loraUrl: "",
                       prompt: "",
                       styleId: "custom",
-                    });
+                    }));
                     setIsStyleDialogOpen(false);
                   }}
                   className={cn(
@@ -3626,43 +4140,96 @@ export default function OverlayPage() {
                   <span className="text-sm font-medium">Custom</span>
                 </button>
 
-                {/* Predefined styles */}
-                {styleModels.map((model) => (
-                  <button
-                    key={model.id}
-                    onClick={() => {
-                      setGenerationSettings({
-                        ...generationSettings,
-                        loraUrl: model.loraUrl || "",
-                        prompt: model.prompt,
-                        styleId: model.id,
-                      });
-                      setIsStyleDialogOpen(false);
-                    }}
-                    className={cn(
-                      "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
-                      generationSettings.styleId === model.id
-                        ? "border-primary bg-primary/10"
-                        : "border-border hover:border-primary/50",
-                    )}
-                  >
-                    <div className="relative w-full aspect-square rounded-lg overflow-hidden">
-                      <Image
-                        src={model.imageSrc}
-                        alt={model.name}
-                        width={200}
-                        height={200}
-                        className="w-full h-full object-cover"
-                      />
-                      {generationSettings.styleId === model.id && (
-                        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center"></div>
-                      )}
-                    </div>
-                    <span className="text-sm font-medium text-center">
-                      {model.name}
+                {isModelsLoading ? (
+                  <div className="col-span-full flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                    <SpinnerIcon className="h-4 w-4 animate-spin" />
+                    <span>Loading models...</span>
+                  </div>
+                ) : modelsError ? (
+                  <div className="col-span-full flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
+                    <span>Failed to load models.</span>
+                    <span className="text-xs text-muted-foreground/80">
+                      {modelsError}
                     </span>
-                  </button>
-                ))}
+                  </div>
+                ) : mediaModels.length === 0 ? (
+                  <div className="col-span-full flex items-center justify-center py-10 text-sm text-muted-foreground">
+                    No models available for your workspace.
+                  </div>
+                ) : (
+                  mediaModels.map((model) => {
+                    const isSelected = generationSettings.styleId === model.id;
+                    const artwork = model.ui?.image || model.ui?.icon;
+                    const shouldRenderArtwork = isRenderableMediaUrl(artwork);
+                    const artworkUrl = shouldRenderArtwork
+                      ? (artwork as string)
+                      : "";
+                    const typeLabel = model.type.replace(/_/g, " ");
+
+                    return (
+                      <button
+                        key={model.id}
+                        onClick={() => {
+                          setGenerationSettings((prev) => ({
+                            ...prev,
+                            loraUrl: "",
+                            styleId: model.id,
+                          }));
+                          setIsStyleDialogOpen(false);
+                        }}
+                        className={cn(
+                          "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
+                          isSelected
+                            ? "border-primary bg-primary/10"
+                            : "border-border hover:border-primary/50",
+                        )}
+                      >
+                        <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                          {shouldRenderArtwork ? (
+                            isVideoAsset(artworkUrl) ? (
+                              <video
+                                src={artworkUrl}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <img
+                                src={artworkUrl}
+                                alt={model.name}
+                                className="w-full h-full object-cover"
+                              />
+                            )
+                          ) : (
+                            <div className="flex flex-col items-center justify-center gap-1 p-3 text-center text-xs text-muted-foreground">
+                              <span className="text-lg font-semibold uppercase">
+                                {model.name.slice(0, 2).toUpperCase()}
+                              </span>
+                              <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">
+                                {typeLabel}
+                              </span>
+                            </div>
+                          )}
+                          {isSelected && (
+                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+                              <Check className="h-6 w-6 text-primary" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-center gap-1 text-center">
+                          <span className="text-sm font-medium">
+                            {model.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground capitalize">
+                            {typeLabel}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>

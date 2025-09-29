@@ -1,4 +1,10 @@
-import React, { useRef, useState, useEffect, useMemo } from "react";
+import React, {
+  useRef,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+} from "react";
 import { Image as KonvaImage, Transformer } from "react-konva";
 import Konva from "konva";
 import useImage from "use-image";
@@ -46,6 +52,31 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
   const [isHovered, setIsHovered] = useState(false);
   const [isDraggable, setIsDraggable] = useState(true);
 
+  const recacheNode = useCallback(() => {
+    const node = shapeRef.current;
+    if (!node) return;
+
+    if (!img || isCroppingImage) {
+      node.clearCache();
+      node.getLayer()?.batchDraw();
+      return;
+    }
+
+    if (node.width() === 0 || node.height() === 0) {
+      return;
+    }
+
+    const pixelRatio =
+      typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+
+    try {
+      node.cache({ pixelRatio });
+      node.getLayer()?.batchDraw();
+    } catch (error) {
+      console.error("Failed to cache image node", error);
+    }
+  }, [img, isCroppingImage]);
+
   useEffect(() => {
     if (isSelected && trRef.current && shapeRef.current) {
       // Only show transformer if this is the only selected item or if clicking on it
@@ -57,6 +88,21 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
       }
     }
   }, [isSelected, selectedIds.length]);
+
+  useEffect(() => {
+    recacheNode();
+  }, [
+    recacheNode,
+    img,
+    image.src,
+    image.width,
+    image.height,
+    image.rotation,
+    image.cropX,
+    image.cropY,
+    image.cropWidth,
+    image.cropHeight,
+  ]);
 
   return (
     <>
@@ -170,6 +216,8 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
               height: Math.max(5, node.height() * scaleY),
               rotation: node.rotation(),
             });
+
+            recacheNode();
           }
           onDragEnd();
         }}

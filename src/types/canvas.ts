@@ -54,9 +54,18 @@ export interface VideoGenerationSettings {
 }
 
 export interface ActiveGeneration {
-  imageUrl: string;
   prompt: string;
   loraUrl?: string;
+  modelId: string;
+  parameters: Record<string, any>;
+  jobId?: string;
+  runId?: string;
+  status?: string;
+  resultUrl?: string;
+  createdAt?: number;
+  error?: string;
+  sourceImageUrl?: string;
+  realtimeToken?: string | null;
 }
 
 export interface ActiveVideoGeneration {
