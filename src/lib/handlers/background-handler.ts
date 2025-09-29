@@ -1,5 +1,4 @@
 import type { PlacedImage } from "@/types/canvas";
-import { uploadImageDirect } from "./generation-handler";
 
 interface BackgroundHandlerDeps {
   images: PlacedImage[];
@@ -11,13 +10,7 @@ interface BackgroundHandlerDeps {
     variant?: "default" | "destructive";
   }) => void;
   saveToHistory: () => void;
-  removeBackground: (params: {
-    imageUrl: string;
-    apiKey?: string;
-  }) => Promise<{ url: string }>;
-  customApiKey?: string;
-  falClient: any;
-  setIsApiKeyDialogOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  removeBackground: (params: { imageUrl: string }) => Promise<{ url: string }>;
 }
 
 export const handleRemoveBackground = async (deps: BackgroundHandlerDeps) => {
@@ -28,9 +21,6 @@ export const handleRemoveBackground = async (deps: BackgroundHandlerDeps) => {
     toast,
     saveToHistory,
     removeBackground,
-    customApiKey,
-    falClient,
-    setIsApiKeyDialogOpen,
   } = deps;
 
   if (selectedIds.length === 0) return;
@@ -95,18 +85,9 @@ export const handleRemoveBackground = async (deps: BackgroundHandlerDeps) => {
         reader.readAsDataURL(blob);
       });
 
-      // Upload the processed image
-      const uploadResult = await uploadImageDirect(
-        dataUrl,
-        falClient,
-        toast,
-        setIsApiKeyDialogOpen,
-      );
-
       // Remove background using the API
       const result = await removeBackground({
-        imageUrl: uploadResult?.url || "",
-        apiKey: customApiKey || undefined,
+        imageUrl: dataUrl,
       });
 
       // Update the image in place

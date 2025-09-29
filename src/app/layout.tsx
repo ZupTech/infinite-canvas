@@ -9,26 +9,26 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL;
 
 export const metadata: Metadata = {
   title: {
-    default: "Flux Kontext Dev - AI Style Transfer | Powered by fal.ai",
-    template: "%s | Flux Kontext Dev",
+    default: "Infinite Canvas - AI Style Transfer",
+    template: "%s | Infinite Canvas",
   },
   description:
-    "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles including anime, oil painting, cyberpunk, and more. Powered by fal.ai's fast AI infrastructure.",
+    "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles including anime, oil painting, cyberpunk, and more.",
   keywords: [
     "AI style transfer",
     "image transformation",
     "flux model",
     "LoRA",
     "AI art",
-    "fal.ai",
+    "AI canvas",
     "photo styling",
     "artificial intelligence",
     "machine learning",
     "image generation",
   ],
-  authors: [{ name: "fal.ai" }],
-  creator: "fal.ai",
-  publisher: "fal.ai",
+  authors: [{ name: "Unite" }],
+  creator: "Unite",
+  publisher: "Unite",
   viewport: {
     width: "device-width",
     initialScale: 1,
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_US",
     url: "/",
-    title: "Flux Kontext Dev - AI Style Transfer | Powered by fal.ai",
+    title: "Infinite Canvas - AI Style Transfer",
     description:
       "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles.",
     siteName: "Flux Kontext Dev",
@@ -64,7 +64,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "Flux Kontext Dev - AI Style Transfer | Powered by fal.ai",
+    title: "Infinite Canvas - AI Style Transfer",
     description:
       "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles.",
     creator: "@fal_ai",

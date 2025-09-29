@@ -53,7 +53,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { createFalClient } from "@fal-ai/client";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
@@ -89,7 +88,6 @@ import { checkOS } from "@/utils/os-utils";
 import { convertImageToVideo } from "@/utils/video-utils";
 
 // Import additional extracted components
-import { useFalClient } from "@/hooks/useFalClient";
 import { CanvasGrid } from "@/components/canvas/CanvasGrid";
 import { SelectionBoxComponent } from "@/components/canvas/SelectionBox";
 import { MiniMap } from "@/components/canvas/MiniMap";
@@ -102,7 +100,6 @@ import { VideoOverlays } from "@/components/canvas/VideoOverlays";
 import { DimensionDisplay } from "@/components/canvas/DimensionDisplay";
 
 // Import handlers
-import { uploadImageDirect } from "@/lib/handlers/generation-handler";
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
 import {
   Select,
@@ -231,7 +228,6 @@ export default function OverlayPage() {
   const [showGrid, setShowGrid] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
   const [isStyleDialogOpen, setIsStyleDialogOpen] = useState(false);
-  const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [isImageToVideoDialogOpen, setIsImageToVideoDialogOpen] =
     useState(false);
   const [selectedImageForVideo, setSelectedImageForVideo] = useState<
@@ -259,8 +255,6 @@ export default function OverlayPage() {
   ] = useState<string | null>(null);
   const [isRemovingVideoBackground, setIsRemovingVideoBackground] =
     useState(false);
-  const [customApiKey, setCustomApiKey] = useState<string>("");
-  const [tempApiKey, setTempApiKey] = useState<string>("");
   const [_, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -309,9 +303,6 @@ export default function OverlayPage() {
     previousGenerationCount,
   ]);
 
-  // Create FAL client instance with proxy
-  const falClient = useFalClient(customApiKey);
-
   const trpc = useTRPC();
 
   // Direct FAL upload function using proxy
@@ -344,10 +335,8 @@ export default function OverlayPage() {
       // Upload image if it's a data URL
       let imageUrl = image.src;
       if (imageUrl.startsWith("data:")) {
-        const uploadResult = await falClient.storage.upload(
-          await (await fetch(imageUrl)).blob(),
-        );
-        imageUrl = uploadResult;
+        // TODO: Replace with new backend upload
+        imageUrl = imageUrl; // Keep original for now
       }
 
       // Create a unique ID for this generation
@@ -429,10 +418,8 @@ export default function OverlayPage() {
       // Upload video if it's a data URL or local file
       let videoUrl = video.src;
       if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        const uploadResult = await falClient.storage.upload(
-          await (await fetch(videoUrl)).blob(),
-        );
-        videoUrl = uploadResult;
+        // TODO: Replace with new backend upload
+        videoUrl = videoUrl; // Keep original for now
       }
 
       // Create a unique ID for this generation
@@ -520,10 +507,8 @@ export default function OverlayPage() {
       // Upload video if it's a data URL or local file
       let videoUrl = video.src;
       if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        const uploadResult = await falClient.storage.upload(
-          await (await fetch(videoUrl)).blob(),
-        );
-        videoUrl = uploadResult;
+        // TODO: Replace with new backend upload
+        videoUrl = videoUrl; // Keep original for now
       }
 
       // Create a unique ID for this generation
@@ -971,15 +956,6 @@ export default function OverlayPage() {
     }
   }, [toast]);
 
-  // Load API key from localStorage on mount
-  useEffect(() => {
-    const savedKey = localStorage.getItem("fal-api-key");
-    if (savedKey) {
-      setCustomApiKey(savedKey);
-      setTempApiKey(savedKey);
-    }
-  }, []);
-
   // Load grid setting from localStorage on mount
   useEffect(() => {
     const savedShowGrid = localStorage.getItem("showGrid");
@@ -1139,15 +1115,6 @@ export default function OverlayPage() {
       setPreviousStyleId(currentStyleId);
     }
   }, [generationSettings.styleId, previousStyleId]);
-
-  // Save API key to localStorage when it changes
-  useEffect(() => {
-    if (customApiKey) {
-      localStorage.setItem("fal-api-key", customApiKey);
-    } else {
-      localStorage.removeItem("fal-api-key");
-    }
-  }, [customApiKey]);
 
   // Save state to history
   const saveToHistory = useCallback(() => {
@@ -2213,9 +2180,6 @@ export default function OverlayPage() {
       toast,
       saveToHistory,
       removeBackground,
-      customApiKey,
-      falClient,
-      setIsApiKeyDialogOpen,
     });
   };
 
@@ -2248,10 +2212,8 @@ export default function OverlayPage() {
       // Upload video if it's a data URL or blob URL
       let videoUrl = video.src;
       if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        const uploadResult = await falClient.storage.upload(
-          await (await fetch(videoUrl)).blob(),
-        );
-        videoUrl = uploadResult;
+        // TODO: Replace with new backend upload
+        videoUrl = videoUrl; // Keep original for now
       }
 
       // Create a unique ID for this generation
@@ -2491,12 +2453,8 @@ export default function OverlayPage() {
       });
 
       // Upload the processed image
-      const uploadResult = await uploadImageDirect(
-        dataUrl,
-        falClient,
-        toast,
-        setIsApiKeyDialogOpen,
-      );
+      // TODO: Replace with new backend upload
+      const uploadResult = { url: dataUrl };
 
       // Isolate object using EVF-SAM2
       console.log("Calling isolateObject with:", {
@@ -2507,7 +2465,6 @@ export default function OverlayPage() {
       const result = await isolateObject({
         imageUrl: uploadResult?.url || "",
         textInput: isolateInputValue,
-        apiKey: customApiKey || undefined,
       });
 
       console.log("IsolateObject result:", result);
@@ -3492,7 +3449,7 @@ export default function OverlayPage() {
             {/* Fal logo */}
             <div className="md:hidden border bg-background/80 py-2 px-3 flex flex-row rounded-xl gap-2 items-center">
               <Link
-                href="https://fal.ai"
+                href="https://unite.ai"
                 target="_blank"
                 className="block transition-opacity"
               >
@@ -3693,9 +3650,6 @@ export default function OverlayPage() {
                             onClick={() => setIsSettingsDialogOpen(true)}
                           >
                             <SlidersHorizontal className="h-4 w-4" />
-                            {customApiKey && (
-                              <div className="absolute size-2.5 -top-0.5 -right-0.5 bg-blue-500 rounded-full" />
-                            )}
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
@@ -4247,99 +4201,6 @@ export default function OverlayPage() {
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="api-key">FAL API Key</Label>
-                <p className="text-sm text-muted-foreground">
-                  Add your own FAL API key to bypass rate limits and use your
-                  own quota.
-                </p>
-                <Input
-                  id="api-key"
-                  type="password"
-                  placeholder="Enter your API key"
-                  value={tempApiKey}
-                  onChange={(e) => setTempApiKey(e.target.value)}
-                  className="font-mono"
-                  style={{ fontSize: "16px" }}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Get your API key from{" "}
-                  <Link
-                    href="https://fal.ai/dashboard/keys"
-                    target="_blank"
-                    className="underline hover:text-foreground"
-                  >
-                    fal.ai/dashboard/keys
-                  </Link>
-                </p>
-              </div>
-
-              {customApiKey && (
-                <div className="rounded-xl bg-green-500/10 border border-green-500/20 p-3">
-                  <div className="flex items-center gap-2 text-sm text-green-600">
-                    <Check className="h-4 w-4" />
-                    <span>Currently using custom API key</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-between gap-2">
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    setCustomApiKey("");
-                    setTempApiKey("");
-                    setIsApiKeyDialogOpen(false);
-                    toast({
-                      title: "API key removed",
-                      description: "Using default rate-limited API",
-                    });
-                  }}
-                  disabled={!customApiKey}
-                >
-                  Remove Key
-                </Button>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setTempApiKey(customApiKey);
-                      setIsApiKeyDialogOpen(false);
-                    }}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={() => {
-                      const trimmedKey = tempApiKey.trim();
-                      if (trimmedKey) {
-                        setCustomApiKey(trimmedKey);
-                        setIsApiKeyDialogOpen(false);
-                        toast({
-                          title: "API key saved",
-                          description: "Your custom API key is now active",
-                        });
-                      } else if (trimmedKey) {
-                        toast({
-                          title: "Invalid API key",
-                          description: "FAL API keys should start with 'fal_'",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                    disabled={!tempApiKey.trim()}
-                  >
-                    Save Key
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className="h-px bg-border/40" />
-
             {/* Appearance */}
             <div className="flex justify-between">
               <div className="flex flex-col gap-2">
@@ -4499,7 +4360,6 @@ export default function OverlayPage() {
           onComplete={handleVideoGenerationComplete}
           onError={handleVideoGenerationError}
           onProgress={handleVideoGenerationProgress}
-          apiKey={customApiKey}
         />
       ))}
 
