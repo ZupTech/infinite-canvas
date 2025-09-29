@@ -1941,16 +1941,22 @@ export default function OverlayPage() {
     const viewportCenterY =
       (canvasSize.height / 2 - viewport.y) / viewport.scale;
 
+    // Calculate total width needed for all images with spacing
+    const spacing = 20; // Space between images
+    const totalWidth = numImages * baseSize + (numImages - 1) * spacing;
+    const startX = viewportCenterX - totalWidth / 2;
+
     for (let i = 0; i < numImages; i++) {
       const placeholderId = `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`;
       placeholderIds.push(placeholderId);
 
-      const offset = i * 20; // Offset each placeholder slightly
+      // Position images horizontally side by side
+      const xPos = startX + i * (baseSize + spacing);
       newPlaceholders.push({
         id: placeholderId,
         src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-        x: viewportCenterX - baseSize / 2 + offset,
-        y: viewportCenterY - baseSize / 2 + offset,
+        x: xPos,
+        y: viewportCenterY - baseSize / 2,
         width: baseSize,
         height: baseSize,
         rotation: 0,

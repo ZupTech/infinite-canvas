@@ -46,10 +46,16 @@ export const createCanvasImagesFromAssets = (
   const updatedPlaceholders: CanvasImage[] = [];
   const newImages: CanvasImage[] = [];
 
+  // Calculate total width needed for all images with spacing
+  const spacing = 20; // Space between images
+  const numImages = assets.length;
+  const totalWidth = numImages * baseSize + (numImages - 1) * spacing;
+  const startX = viewportCenterX - totalWidth / 2;
+
   assets.forEach((asset, index) => {
-    const offset = index * 20; // Offset each image slightly
-    const x = viewportCenterX - baseSize / 2 + offset;
-    const y = viewportCenterY - baseSize / 2 + offset;
+    // Position images horizontally side by side
+    const x = startX + index * (baseSize + spacing);
+    const y = viewportCenterY - baseSize / 2;
 
     const width =
       asset.width && asset.width > 0 ? Math.min(asset.width, 1024) : baseSize;
