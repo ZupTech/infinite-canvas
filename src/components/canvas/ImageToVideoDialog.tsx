@@ -10,17 +10,18 @@ import {
 import { Button } from "@/components/ui/button";
 import { VideoGenerationSettings } from "@/types/canvas";
 import { SpinnerIcon } from "@/components/icons";
-import {
-  VideoModelSelector,
-  VideoModelOptions,
-  ModelPricingDisplay,
-} from "./VideoModelComponents";
-import {
-  getVideoModelById,
-  getDefaultVideoModel,
-  type VideoModelConfig,
-} from "@/lib/video-models";
 import { ChevronRight, X } from "lucide-react";
+import { type MediaModel } from "@/utils/model-utils";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface ImageToVideoDialogProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ interface ImageToVideoDialogProps {
   onConvert: (settings: VideoGenerationSettings) => void;
   imageUrl: string;
   isConverting: boolean;
+  mediaModels: MediaModel[];
 }
 
 export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
@@ -36,27 +38,44 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
   onConvert,
   imageUrl,
   isConverting,
+  mediaModels,
 }) => {
-  const defaultModel = getDefaultVideoModel("image-to-video");
-  const [selectedModelId, setSelectedModelId] = useState(
-    defaultModel?.id || "seedance-pro",
+  // Filter video models from dynamic catalog
+  const videoModels = React.useMemo(
+    () => mediaModels.filter((m) => m.type === "video"),
+    [mediaModels],
   );
-  const [selectedModel, setSelectedModel] = useState<
-    VideoModelConfig | undefined
-  >(defaultModel);
-  const [optionValues, setOptionValues] = useState<Record<string, any>>(
-    defaultModel?.defaults || {},
-  );
+
+  const [selectedModelId, setSelectedModelId] = useState("");
+  const [optionValues, setOptionValues] = useState<Record<string, any>>({});
   const [showMoreOptions, setShowMoreOptions] = useState(false);
 
-  // Update model when selection changes
+  // Get selected model (computed, not state)
+  const selectedModel = React.useMemo(
+    () => videoModels.find((m) => m.id === selectedModelId),
+    [videoModels, selectedModelId],
+  );
+
+  // Initialize first model when models load
   useEffect(() => {
-    const model = getVideoModelById(selectedModelId);
-    if (model) {
-      setSelectedModel(model);
-      setOptionValues(model.defaults);
+    if (videoModels.length > 0 && !selectedModelId) {
+      const firstModel = videoModels[0];
+      setSelectedModelId(firstModel.id);
     }
-  }, [selectedModelId]);
+  }, [videoModels.length]); // Only depend on length, not the array itself
+
+  // Initialize option values when model changes
+  useEffect(() => {
+    if (selectedModel) {
+      const defaults: Record<string, any> = {};
+      selectedModel.parameters?.forEach((param) => {
+        if (param.default !== undefined) {
+          defaults[param.name] = param.default;
+        }
+      });
+      setOptionValues(defaults);
+    }
+  }, [selectedModel?.id]); // Only depend on model ID
 
   const handleOptionChange = (field: string, value: any) => {
     setOptionValues((prev) => ({ ...prev, [field]: value }));
@@ -66,19 +85,11 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     e.preventDefault();
     if (!selectedModel) return;
 
-    // Map the dynamic options to the VideoGenerationSettings format
-    // This maintains backward compatibility with existing code
     const settings: VideoGenerationSettings = {
       prompt: optionValues.prompt || "",
       sourceUrl: imageUrl,
       modelId: selectedModel.id,
-      // Include all option values for new models first
       ...optionValues,
-      // Then override with properly typed values
-      ...(optionValues.duration && {
-        duration: parseInt(optionValues.duration),
-      }),
-      ...(optionValues.seed !== undefined && { seed: optionValues.seed }),
     };
 
     onConvert(settings);
@@ -99,16 +110,31 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
         <form onSubmit={handleSubmit} className="py-2 space-y-4">
           {/* Model Selection */}
           <div className="w-full mb-4">
-            <VideoModelSelector
+            <Label htmlFor="model-select">Model</Label>
+            <Select
               value={selectedModelId}
-              onChange={setSelectedModelId}
-              category="image-to-video"
+              onValueChange={setSelectedModelId}
               disabled={isConverting}
-            />
+            >
+              <SelectTrigger id="model-select">
+                <SelectValue placeholder="Select a video model" />
+              </SelectTrigger>
+              <SelectContent>
+                {videoModels.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
-          {/* Pricing Display */}
-          <ModelPricingDisplay model={selectedModel} className="mb-4" />
+          {/* Show model description if available */}
+          {selectedModel?.description && (
+            <p className="text-sm text-muted-foreground">
+              {selectedModel.description}
+            </p>
+          )}
 
           <div className="flex gap-4">
             {/* Left column - Image Preview */}
@@ -126,25 +152,109 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
 
             {/* Right column - Options */}
             <div className="w-2/3 space-y-4">
-              {/* Main Options */}
-              <VideoModelOptions
-                model={selectedModel}
-                values={optionValues}
-                onChange={handleOptionChange}
-                disabled={isConverting}
-                optionKeys={[
-                  "prompt",
-                  "resolution",
-                  "aspectRatio",
-                  "frameRate",
-                  "negativePrompt",
-                ]}
-              />
+              {/* Render dynamic parameters */}
+              {selectedModel?.parameters
+                ?.filter((p) => {
+                  // Skip file/image inputs
+                  const isFileInput =
+                    p.type === "file" || p.type === "multifile";
+                  const isImageAccept =
+                    p.accept === "image/*" ||
+                    (typeof p.accept === "string" &&
+                      p.accept?.includes("image"));
+                  const isImageParam = isFileInput && isImageAccept;
+
+                  // Only show these main params
+                  return (
+                    !isImageParam &&
+                    ["prompt", "negative_prompt", "duration", "seed"].includes(
+                      p.name,
+                    )
+                  );
+                })
+                .slice(0, 3)
+                .map((param) => (
+                  <div key={param.name} className="space-y-2">
+                    <Label htmlFor={param.name}>
+                      {param.label || param.name}
+                    </Label>
+                    {param.type === "text" || param.type === "string" ? (
+                      param.name === "prompt" ||
+                      param.name === "negative_prompt" ? (
+                        <Textarea
+                          id={param.name}
+                          value={optionValues[param.name] || ""}
+                          onChange={(e) =>
+                            handleOptionChange(param.name, e.target.value)
+                          }
+                          placeholder={param.placeholder}
+                          disabled={isConverting}
+                          rows={3}
+                        />
+                      ) : (
+                        <Input
+                          id={param.name}
+                          type="text"
+                          value={optionValues[param.name] || ""}
+                          onChange={(e) =>
+                            handleOptionChange(param.name, e.target.value)
+                          }
+                          placeholder={param.placeholder}
+                          disabled={isConverting}
+                        />
+                      )
+                    ) : param.type === "number" || param.type === "integer" ? (
+                      <Input
+                        id={param.name}
+                        type="number"
+                        value={optionValues[param.name] ?? ""}
+                        onChange={(e) =>
+                          handleOptionChange(
+                            param.name,
+                            param.type === "integer"
+                              ? parseInt(e.target.value)
+                              : parseFloat(e.target.value),
+                          )
+                        }
+                        min={param.min}
+                        max={param.max}
+                        step={param.type === "integer" ? 1 : 0.1}
+                        disabled={isConverting}
+                      />
+                    ) : param.type === "select" && param.options ? (
+                      <Select
+                        value={optionValues[param.name]?.toString()}
+                        onValueChange={(value) =>
+                          handleOptionChange(param.name, value)
+                        }
+                        disabled={isConverting}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {param.options.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : null}
+                    {param.description && (
+                      <p className="text-xs text-muted-foreground">
+                        {param.description}
+                      </p>
+                    )}
+                  </div>
+                ))}
 
               {/* More Options Button */}
               {selectedModel &&
-                Object.keys(selectedModel.options).length > 5 && (
+                selectedModel.parameters &&
+                selectedModel.parameters.length > 4 && (
                   <Button
+                    type="button"
                     variant="ghost"
                     onClick={() => setShowMoreOptions(true)}
                     className="px-0 pr-4 flex gap-2 text-sm"
@@ -214,19 +324,91 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                   </Button>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
-                  <VideoModelOptions
-                    model={selectedModel}
-                    values={optionValues}
-                    onChange={handleOptionChange}
-                    disabled={isConverting}
-                    excludeKeys={[
-                      "prompt",
-                      "resolution",
-                      "aspectRatio",
-                      "frameRate",
-                      "negativePrompt",
-                    ]}
-                  />
+                  {/* Render all other parameters */}
+                  {selectedModel?.parameters
+                    ?.filter((p) => {
+                      // Skip file/image inputs
+                      const isFileInput =
+                        p.type === "file" || p.type === "multifile";
+                      const isImageAccept =
+                        p.accept === "image/*" ||
+                        (typeof p.accept === "string" &&
+                          p.accept?.includes("image"));
+                      const isImageParam = isFileInput && isImageAccept;
+
+                      // Show all params except main ones and image inputs
+                      return (
+                        !isImageParam &&
+                        ![
+                          "prompt",
+                          "negative_prompt",
+                          "duration",
+                          "seed",
+                        ].includes(p.name)
+                      );
+                    })
+                    .map((param) => (
+                      <div key={param.name} className="space-y-2 mb-4">
+                        <Label htmlFor={`advanced-${param.name}`}>
+                          {param.label || param.name}
+                        </Label>
+                        {param.type === "text" || param.type === "string" ? (
+                          <Input
+                            id={`advanced-${param.name}`}
+                            type="text"
+                            value={optionValues[param.name] || ""}
+                            onChange={(e) =>
+                              handleOptionChange(param.name, e.target.value)
+                            }
+                            placeholder={param.placeholder}
+                            disabled={isConverting}
+                          />
+                        ) : param.type === "number" ||
+                          param.type === "integer" ? (
+                          <Input
+                            id={`advanced-${param.name}`}
+                            type="number"
+                            value={optionValues[param.name] ?? ""}
+                            onChange={(e) =>
+                              handleOptionChange(
+                                param.name,
+                                param.type === "integer"
+                                  ? parseInt(e.target.value)
+                                  : parseFloat(e.target.value),
+                              )
+                            }
+                            min={param.min}
+                            max={param.max}
+                            step={param.type === "integer" ? 1 : 0.1}
+                            disabled={isConverting}
+                          />
+                        ) : param.type === "select" && param.options ? (
+                          <Select
+                            value={optionValues[param.name]?.toString()}
+                            onValueChange={(value) =>
+                              handleOptionChange(param.name, value)
+                            }
+                            disabled={isConverting}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {param.options.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : null}
+                        {param.description && (
+                          <p className="text-xs text-muted-foreground">
+                            {param.description}
+                          </p>
+                        )}
+                      </div>
+                    ))}
                 </div>
               </div>
             </div>

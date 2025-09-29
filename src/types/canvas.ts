@@ -77,8 +77,8 @@ export interface ActiveVideoGeneration {
   duration?: number;
   motion?: string;
   styleId?: string;
-  modelId?: string; // Model identifier from video-models.ts
-  modelConfig?: any; // Model configuration from video-models.ts
+  modelId?: string; // Model identifier from backend API
+  modelConfig?: any; // Model configuration from backend API
   resolution?: "480p" | "720p" | "1080p"; // Video resolution
   cameraFixed?: boolean; // Whether to fix the camera position
   seed?: number; // Random seed to control video generation
