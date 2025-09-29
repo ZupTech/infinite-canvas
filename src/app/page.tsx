@@ -107,6 +107,10 @@ import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/h
 import { useImageGeneration } from "@/hooks/useImageGeneration";
 import { createCanvasImagesFromAssets } from "@/utils/imageGeneration";
 import {
+  PLACEHOLDER_DATA_URI,
+  shouldSkipStorage,
+} from "@/utils/placeholder-utils";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -845,10 +849,7 @@ export default function OverlayPage() {
       // Save actual image data to IndexedDB
       for (const image of images) {
         // Skip if it's a placeholder for generation
-        if (
-          image.src.startsWith("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP")
-        )
-          continue;
+        if (shouldSkipStorage(image.src)) continue;
 
         // Check if we already have this image stored
         const existingImage = await canvasStorage.getImage(image.id);
@@ -860,10 +861,7 @@ export default function OverlayPage() {
       // Save video data to IndexedDB
       for (const video of videos) {
         // Skip if it's a placeholder for generation
-        if (
-          video.src.startsWith("data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP")
-        )
-          continue;
+        if (shouldSkipStorage(video.src)) continue;
 
         // Check if we already have this video stored
         const existingVideo = await canvasStorage.getVideo(video.id);
@@ -1954,7 +1952,7 @@ export default function OverlayPage() {
       const xPos = startX + i * (baseSize + spacing);
       newPlaceholders.push({
         id: placeholderId,
-        src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+        src: PLACEHOLDER_DATA_URI,
         x: xPos,
         y: viewportCenterY - baseSize / 2,
         width: baseSize,
