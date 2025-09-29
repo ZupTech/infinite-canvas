@@ -11,6 +11,8 @@ import useImage from "use-image";
 import { useStreamingImage } from "@/hooks/useStreamingImage";
 import type { PlacedImage } from "@/types/canvas";
 import { throttle } from "@/utils/performance";
+import { isPlaceholder } from "@/utils/placeholder-utils";
+import { PlaceholderRect } from "./PlaceholderRect";
 
 interface CanvasImageProps {
   image: PlacedImage;
@@ -103,6 +105,104 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
     image.cropWidth,
     image.cropHeight,
   ]);
+
+  // Check if this is a placeholder image
+  const isPlaceholderImage = isPlaceholder(image.src);
+
+  // If it's a placeholder, render the placeholder component instead
+  if (isPlaceholderImage) {
+    return (
+      <>
+        <PlaceholderRect
+          x={image.x}
+          y={image.y}
+          width={image.width}
+          height={image.height}
+          rotation={image.rotation}
+          isSelected={isSelected}
+          isDraggable={isDraggable}
+          cropX={image.cropX}
+          cropY={image.cropY}
+          cropWidth={image.cropWidth}
+          cropHeight={image.cropHeight}
+          onSelect={onSelect}
+          onDragStart={(e) => {
+            e.cancelBubble = true;
+            if (!isSelected) {
+              onSelect(e);
+            }
+            onDragStart();
+          }}
+          onDragMove={useMemo(
+            () =>
+              throttle((e: any) => {
+                const node = e.target;
+
+                if (selectedIds.includes(image.id) && selectedIds.length > 1) {
+                  const startPos = dragStartPositions.get(image.id);
+                  if (startPos) {
+                    const deltaX = node.x() - startPos.x;
+                    const deltaY = node.y() - startPos.y;
+
+                    setImages((prev) =>
+                      prev.map((img) => {
+                        if (img.id === image.id) {
+                          return { ...img, x: node.x(), y: node.y() };
+                        } else if (selectedIds.includes(img.id)) {
+                          const imgStartPos = dragStartPositions.get(img.id);
+                          if (imgStartPos) {
+                            return {
+                              ...img,
+                              x: imgStartPos.x + deltaX,
+                              y: imgStartPos.y + deltaY,
+                            };
+                          }
+                        }
+                        return img;
+                      }),
+                    );
+                  }
+                } else {
+                  onChange({
+                    x: node.x(),
+                    y: node.y(),
+                  });
+                }
+              }, 16),
+            [selectedIds, image.id, dragStartPositions, setImages, onChange],
+          )}
+          onDragEnd={(e) => {
+            onDragEnd();
+          }}
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          onMouseDown={(e) => {
+            const isLeftButton = e.evt.button === 0;
+            setIsDraggable(isLeftButton);
+
+            if (e.evt.button === 1) {
+              return;
+            }
+          }}
+          onMouseUp={() => {
+            setIsDraggable(true);
+          }}
+          onDoubleClick={onDoubleClick}
+        />
+        {isSelected && selectedIds.length === 1 && (
+          <Transformer
+            ref={trRef}
+            boundBoxFunc={(oldBox, newBox) => {
+              if (newBox.width < 5 || newBox.height < 5) {
+                return oldBox;
+              }
+              return newBox;
+            }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <>
