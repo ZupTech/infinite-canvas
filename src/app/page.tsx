@@ -46,7 +46,6 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useMultiImageGeneration } from "@/hooks/useMultiImageGeneration";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
@@ -65,14 +64,7 @@ import { ImageToVideoDialog } from "@/components/canvas/ImageToVideoDialog";
 // Removed: import { getVideoModelById } from "@/lib/video-models";
 
 // Import types
-import type {
-  PlacedImage,
-  PlacedVideo,
-  GenerationSettings,
-  VideoGenerationSettings,
-  ActiveGeneration,
-  SelectionBox,
-} from "@/types/canvas";
+import type { PlacedImage, PlacedVideo, SelectionBox } from "@/types/canvas";
 import { checkOS } from "@/utils/os-utils";
 
 // Import additional extracted components
@@ -93,8 +85,6 @@ import { ModelSelectionDialog } from "@/components/canvas/ModelSelectionDialog";
 // Import handlers
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
 import { useImageGeneration } from "@/hooks/useImageGeneration";
-import { createCanvasImagesFromAssets } from "@/utils/imageGeneration";
-import { PLACEHOLDER_DATA_URI } from "@/utils/placeholder-utils";
 import { useImageToImage } from "@/hooks/useImageToImage";
 import {
   Select,
@@ -115,6 +105,7 @@ import { useCanvasPreferences } from "@/features/overlay/hooks/useCanvasPreferen
 import { useCanvasHistory } from "@/features/overlay/hooks/useCanvasHistory";
 import { useCanvasPersistence } from "@/features/overlay/hooks/useCanvasPersistence";
 import { useVideoGenerations } from "@/features/overlay/hooks/useVideoGenerations";
+import { useOverlayGeneration } from "@/features/overlay/hooks/useOverlayGeneration";
 
 export default function OverlayPage() {
   const { theme, setTheme } = useTheme();
@@ -127,15 +118,6 @@ export default function OverlayPage() {
   );
   const { toast } = useToast();
 
-  const [generationSettings, setGenerationSettings] =
-    useState<GenerationSettings>({
-      prompt: "",
-      loraUrl: "",
-    });
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [activeGenerations, setActiveGenerations] = useState<
-    Map<string, ActiveGeneration>
-  >(new Map());
   const [selectionBox, setSelectionBox] = useState<SelectionBox>({
     startX: 0,
     startY: 0,
@@ -176,9 +158,6 @@ export default function OverlayPage() {
     useState(false);
   const [selectedModelForDetails, setSelectedModelForDetails] =
     useState<MediaModel | null>(null);
-  const [modelParameters, setModelParameters] = useState<Record<string, any>>(
-    {},
-  );
 
   const { showGrid, setShowGrid, showMinimap, setShowMinimap } =
     useCanvasPreferences();
@@ -264,6 +243,45 @@ export default function OverlayPage() {
     saveToHistory,
   });
 
+  const { processGenerationResult, extractJobAsset } = useImageGeneration();
+  const imageToImage = useImageToImage({
+    images,
+    selectedIds,
+  });
+
+  const {
+    generationSettings,
+    setGenerationSettings,
+    modelParameters,
+    setModelParameters,
+    isGenerating,
+    setIsGenerating,
+    activeGenerations,
+    setActiveGenerations,
+    showSuccess,
+    handleRun,
+  } = useOverlayGeneration({
+    canvasSize,
+    viewport,
+    mediaModels,
+    displayMediaModel,
+    resolveModelId,
+    images,
+    setImages,
+    setVideos,
+    setSelectedIds,
+    toast,
+    imageToImage,
+    processGenerationResult,
+    extractJobAsset,
+    saveToStorage,
+    activeVideoGenerationsCount: activeVideoGenerations.size,
+    isRemovingVideoBackground,
+    isIsolating,
+    isExtendingVideo,
+    isTransformingVideo,
+  });
+
   const handleConvertToVideo = useCallback(
     (imageId: string) => {
       if (images.some((img) => img.id === imageId)) {
@@ -300,8 +318,6 @@ export default function OverlayPage() {
     [openRemoveVideoBackgroundDialog, videos],
   );
 
-  const [showSuccess, setShowSuccess] = useState(false);
-
   // Touch event states for mobile
   const [lastTouchDistance, setLastTouchDistance] = useState<number | null>(
     null,
@@ -312,40 +328,6 @@ export default function OverlayPage() {
   } | null>(null);
   const [isTouchingImage, setIsTouchingImage] = useState(false);
 
-  // Track when generation completes
-  const [previousGenerationCount, setPreviousGenerationCount] = useState(0);
-
-  useEffect(() => {
-    const currentCount =
-      activeGenerations.size +
-      activeVideoGenerations.size +
-      (isRemovingVideoBackground ? 1 : 0) +
-      (isIsolating ? 1 : 0) +
-      (isExtendingVideo ? 1 : 0) +
-      (isTransformingVideo ? 1 : 0);
-
-    // If we went from having generations to having none, show success
-    if (previousGenerationCount > 0 && currentCount === 0) {
-      setShowSuccess(true);
-      // Hide success after 2 seconds
-      const timeout = setTimeout(() => {
-        setShowSuccess(false);
-      }, 2000);
-      return () => clearTimeout(timeout);
-    }
-
-    setPreviousGenerationCount(currentCount);
-  }, [
-    activeGenerations.size,
-    activeVideoGenerations.size,
-    isGenerating,
-    isRemovingVideoBackground,
-    isIsolating,
-    isExtendingVideo,
-    isTransformingVideo,
-    previousGenerationCount,
-  ]);
-
   // Removed: const trpc = useTRPC();
 
   // TODO: Migrate removeBackground to REST API
@@ -353,18 +335,6 @@ export default function OverlayPage() {
 
   // TODO: Migrate isolateObject to REST API
   // const { mutateAsync: isolateObject } = useMutation(...);
-
-  const multiImageHandlers = useMultiImageGeneration({
-    activeGenerations,
-    setActiveGenerations,
-    setImages,
-    setVideos,
-    setSelectedIds,
-    setIsGenerating,
-    saveToStorage,
-    viewport,
-    canvasSize,
-  });
 
   // Set canvas ready state after mount
   useEffect(() => {
@@ -904,394 +874,6 @@ export default function OverlayPage() {
   // Users can now manually combine images via the context menu before running generation
 
   // Handle context menu actions
-  const { processGenerationResult, extractJobAsset } = useImageGeneration();
-
-  // Image-to-image logic
-  const imageToImage = useImageToImage({
-    images,
-    selectedIds,
-  });
-
-  const handleRun = useCallback(async () => {
-    const prompt = generationSettings.prompt.trim();
-
-    if (!prompt) {
-      toast({
-        title: "Prompt required",
-        description: "Please enter a prompt before generating",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const resolvedModelId = resolveModelId();
-
-    const targetModel =
-      mediaModels.find((model) => model.id === resolvedModelId) ||
-      displayMediaModel;
-
-    if (!targetModel) {
-      toast({
-        title: "Select a model",
-        description: "Choose a model from the catalog before generating",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Allow image, upscale, and video models
-    const allowedTypes = ["image", "upscale", "video"];
-    if (!allowedTypes.includes(targetModel.type)) {
-      toast({
-        title: "Unsupported model",
-        description: `Model type "${targetModel.type}" is not supported in the canvas.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsGenerating(true);
-
-    // Get number of images to generate from model parameters, default to 1
-    const numImages = Math.max(
-      1,
-      Math.min(4, Number(modelParameters.num_images) || 1),
-    );
-
-    // Create multiple placeholders for multiple images
-    const placeholderIds: string[] = [];
-    const newPlaceholders: any[] = [];
-    const baseSize = 512;
-    const viewportCenterX =
-      (canvasSize.width / 2 - viewport.x) / viewport.scale;
-    const viewportCenterY =
-      (canvasSize.height / 2 - viewport.y) / viewport.scale;
-
-    // Calculate total width needed for all images with spacing
-    const spacing = 20; // Space between images
-    const totalWidth = numImages * baseSize + (numImages - 1) * spacing;
-    const startX = viewportCenterX - totalWidth / 2;
-
-    for (let i = 0; i < numImages; i++) {
-      const placeholderId = `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`;
-      placeholderIds.push(placeholderId);
-
-      // Position images horizontally side by side
-      const xPos = startX + i * (baseSize + spacing);
-      newPlaceholders.push({
-        id: placeholderId,
-        src: PLACEHOLDER_DATA_URI,
-        x: xPos,
-        y: viewportCenterY - baseSize / 2,
-        width: baseSize,
-        height: baseSize,
-        rotation: 0,
-        isGenerated: true,
-      });
-    }
-
-    setImages((prev) => [...prev, ...newPlaceholders]);
-    setSelectedIds(placeholderIds);
-
-    const parameters: Record<string, any> = {
-      prompt,
-    };
-
-    if (generationSettings.loraUrl) {
-      parameters.loraUrl = generationSettings.loraUrl;
-    }
-
-    if (generationSettings.styleId && generationSettings.styleId !== "custom") {
-      parameters.styleId = generationSettings.styleId;
-    }
-    // Include model parameters
-    Object.keys(modelParameters).forEach((key) => {
-      if (
-        modelParameters[key] !== undefined &&
-        modelParameters[key] !== null &&
-        modelParameters[key] !== ""
-      ) {
-        parameters[key] = modelParameters[key];
-      }
-    });
-
-    // Prepare parameters for image-to-image if applicable
-    const { parameters: finalParameters, endpoint } =
-      imageToImage.prepareParameters(targetModel, parameters);
-
-    // Set up active generations for all placeholders with a shared runId
-    // This will be updated with the actual runId after the API call
-    setActiveGenerations((prev) => {
-      const next = new Map(prev);
-      placeholderIds.forEach((placeholderId, index) => {
-        next.set(placeholderId, {
-          prompt,
-          loraUrl: generationSettings.loraUrl,
-          modelId: targetModel.id,
-          parameters: finalParameters,
-          status: "queued",
-          createdAt: Date.now(),
-          placeholderIds, // Track all related placeholders
-          isCoordinator: index === 0, // First placeholder is the coordinator
-        });
-      });
-      return next;
-    });
-
-    try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          modelId: targetModel.id,
-          endpoint, // Use resolved endpoint
-          parameters: finalParameters,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        throw new Error(
-          errorText ||
-            `Generation request failed with status ${response.status}`,
-        );
-      }
-
-      const payload = await response.json();
-      const job = payload.job;
-      const realtime = payload.realtime ?? {};
-
-      if (!job) {
-        throw new Error("Generation response did not include job details.");
-      }
-
-      const runId = job.runId || realtime.runId || job.id;
-      const status = job.status ?? "queued";
-      console.log("Job received:", {
-        runId,
-        status,
-        jobType: job.type || "unknown",
-      });
-
-      setActiveGenerations((prev) => {
-        const next = new Map(prev);
-
-        // Update all placeholders with the same runId
-        placeholderIds.forEach((placeholderId) => {
-          const existing = prev.get(placeholderId);
-          if (existing) {
-            next.set(placeholderId, {
-              ...existing,
-              jobId: job.id,
-              runId,
-              status,
-              realtimeToken: realtime.token ?? null,
-              resultUrl: extractJobAsset(job)?.url ?? existing.resultUrl,
-              // Preserve coordinator status
-              isCoordinator: existing.isCoordinator,
-            });
-          }
-        });
-
-        return next;
-      });
-
-      console.log("Job status:", status);
-
-      if (status === "completed" || status === "COMPLETED") {
-        console.log("Processing completed job:", job);
-        const result = processGenerationResult(job);
-        console.log("Generation result:", result);
-
-        if (!result.success) {
-          throw new Error(result.error || "Generation failed");
-        }
-
-        console.log("Assets found:", result.assets.length);
-        console.log("Placeholder IDs:", placeholderIds);
-        result.assets.forEach((asset, i) =>
-          console.log(`Asset ${i}:`, asset.url),
-        );
-
-        const { updatedPlaceholders, newImages, newVideos } =
-          createCanvasImagesFromAssets(
-            result.assets,
-            placeholderIds,
-            viewport,
-            canvasSize,
-          );
-
-        console.log("Canvas images and videos created:", {
-          updatedPlaceholdersCount: updatedPlaceholders.length,
-          newImagesCount: newImages.length,
-          newVideosCount: newVideos.length,
-        });
-
-        if (updatedPlaceholders.length > 0) {
-          // Update placeholders and add new images in a single atomic operation
-          console.log("Updating canvas with all images:", {
-            placeholdersCount: updatedPlaceholders.length,
-            newImagesCount: newImages.length,
-            totalImages: updatedPlaceholders.length + newImages.length,
-          });
-
-          setImages((prev) => {
-            // Create a map for quick placeholder lookup
-            const placeholderMap = new Map(
-              updatedPlaceholders.map((p) => [p.id, p]),
-            );
-
-            console.log("Applying images update:", {
-              prevCount: prev.length,
-              placeholderMapSize: placeholderMap.size,
-              newImagesCount: newImages.length,
-              placeholderMap: Array.from(placeholderMap.entries()).map(
-                ([id, img]) => ({ id, src: img.src }),
-              ),
-            });
-
-            const updatedPrev = prev.map((img) => {
-              const replacement = placeholderMap.get(img.id);
-              if (replacement) {
-                console.log(
-                  `Replacing placeholder ${img.id} with ${replacement.src}`,
-                );
-              }
-              return replacement || img;
-            });
-
-            const finalImages = [...updatedPrev, ...newImages];
-
-            console.log("Final images count:", finalImages.length);
-            return finalImages;
-          });
-
-          // Select all generated images
-          const allGeneratedIds = [
-            ...updatedPlaceholders.map((p) => p.id),
-            ...newImages.map((img) => img.id),
-          ];
-          if (allGeneratedIds.length > 0) {
-            setSelectedIds(allGeneratedIds);
-          }
-        }
-
-        // Add any generated videos to the canvas
-        if (newVideos.length > 0) {
-          console.log("Adding generated videos to canvas:", {
-            videosCount: newVideos.length,
-          });
-
-          // Align videos to placeholder positions/sizes when available
-          const placeholderMap = new Map(
-            images
-              .filter((img) => placeholderIds.includes(img.id))
-              .map((img) => [img.id, img]),
-          );
-
-          const mappedVideos = newVideos.map((vid, index) => {
-            const placeholderId = placeholderIds[index];
-            const ph = placeholderId
-              ? placeholderMap.get(placeholderId)
-              : undefined;
-            if (ph) {
-              return {
-                ...vid,
-                x: ph.x,
-                y: ph.y,
-                width: ph.width,
-                height: ph.height,
-              };
-            }
-            return vid;
-          });
-
-          setVideos((prev) => [...prev, ...mappedVideos]);
-
-          // Remove image placeholders now that we placed videos
-          setImages((prev) =>
-            prev.filter((img) => !placeholderIds.includes(img.id)),
-          );
-
-          // Select all generated videos
-          const videoIds = mappedVideos.map((v) => v.id);
-          if (videoIds.length > 0) {
-            setSelectedIds(videoIds);
-          }
-        }
-
-        setActiveGenerations((prev) => {
-          const next = new Map(prev);
-          // Clean up all placeholders
-          placeholderIds.forEach((id) => next.delete(id));
-          return next;
-        });
-        setIsGenerating(false);
-        setTimeout(() => saveToStorage(), 100);
-      } else if (!runId) {
-        throw new Error(
-          "Generation response did not include a run identifier.",
-        );
-      } else {
-        toast({
-          title: "Generation started",
-          description:
-            "Hang tight, we will add the result to the canvas automatically.",
-        });
-      }
-    } catch (error) {
-      console.error("Failed to start generation:", error);
-
-      const message =
-        error instanceof Error
-          ? error.message || "Failed to start generation"
-          : "Failed to start generation";
-
-      setImages((prev) =>
-        prev.filter((img) => !placeholderIds.includes(img.id)),
-      );
-      setActiveGenerations((prev) => {
-        const next = new Map(prev);
-        placeholderIds.forEach((id) => next.delete(id));
-        return next;
-      });
-      setIsGenerating(false);
-
-      toast({
-        title: "Generation failed",
-        description: message,
-        variant: "destructive",
-      });
-    }
-  }, [
-    canvasSize.height,
-    canvasSize.width,
-    displayMediaModel,
-    extractJobAsset,
-    processGenerationResult,
-    createCanvasImagesFromAssets,
-    generationSettings.loraUrl,
-    generationSettings.prompt,
-    generationSettings.styleId,
-    mediaModels,
-    modelParameters,
-    previousModelId,
-    saveToStorage,
-    selectedIds,
-    setActiveGenerations,
-    setImages,
-    setSelectedIds,
-    setIsGenerating,
-    toast,
-    viewport.x,
-    viewport.y,
-    viewport.scale,
-    imageToImage,
-  ]);
 
   const handleDelete = () => {
     // Save to history before deleting
@@ -3072,6 +2654,7 @@ export default function OverlayPage() {
         open={isModelDetailsDialogOpen}
         onOpenChange={setIsModelDetailsDialogOpen}
         model={selectedModelForDetails}
+        initialParameters={modelParameters}
         onSave={(parameters) => {
           setModelParameters(parameters);
           console.log("Parâmetros salvos:", parameters);

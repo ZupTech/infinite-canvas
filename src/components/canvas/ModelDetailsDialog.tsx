@@ -85,6 +85,7 @@ interface ModelDetailsDialogProps {
   onOpenChange: (open: boolean) => void;
   model: MediaModel | null;
   onSave?: (parameters: Record<string, any>) => void;
+  initialParameters?: Record<string, any>;
 }
 
 export function ModelDetailsDialog({
@@ -92,6 +93,7 @@ export function ModelDetailsDialog({
   onOpenChange,
   model,
   onSave,
+  initialParameters,
 }: ModelDetailsDialogProps) {
   const [parameters, setParameters] = useState<Record<string, any>>({});
 
@@ -99,11 +101,16 @@ export function ModelDetailsDialog({
     if (model?.parameters) {
       const initialParams: Record<string, any> = {};
       model.parameters.forEach((param) => {
-        initialParams[param.name] = param.default || "";
+        const existingValue = initialParameters?.[param.name];
+        if (existingValue !== undefined) {
+          initialParams[param.name] = existingValue;
+        } else {
+          initialParams[param.name] = param.default || "";
+        }
       });
       setParameters(initialParams);
     }
-  }, [model]);
+  }, [initialParameters, model]);
 
   if (!model) {
     return null;
