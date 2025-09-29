@@ -101,6 +101,7 @@ import { VideoOverlays } from "@/components/canvas/VideoOverlays";
 import { DimensionDisplay } from "@/components/canvas/DimensionDisplay";
 import { ModelDetailsDialog } from "@/components/canvas/ModelDetailsDialog";
 import { ModelParametersButton } from "@/components/canvas/ModelParametersButton";
+import { ModelSelectionDialog } from "@/components/canvas/ModelSelectionDialog";
 
 // Import handlers
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
@@ -110,6 +111,7 @@ import {
   PLACEHOLDER_DATA_URI,
   shouldSkipStorage,
 } from "@/utils/placeholder-utils";
+import { useImageToImage } from "@/hooks/useImageToImage";
 import {
   Select,
   SelectContent,
@@ -187,7 +189,7 @@ export default function OverlayPage() {
       prompt: "",
       loraUrl: "",
     });
-  const [previousStyleId, setPreviousStyleId] = useState<string | null>(null);
+  const [previousModelId, setPreviousModelId] = useState<string | null>(null);
   const [mediaModels, setMediaModels] = useState<MediaModel[]>([]);
   const [isModelsLoading, setIsModelsLoading] = useState(true);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -236,7 +238,7 @@ export default function OverlayPage() {
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
-  const [isStyleDialogOpen, setIsStyleDialogOpen] = useState(false);
+  const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [isModelDetailsDialogOpen, setIsModelDetailsDialogOpen] =
     useState(false);
@@ -1079,7 +1081,7 @@ export default function OverlayPage() {
             };
           });
 
-          setPreviousStyleId((prev) => prev ?? preferredModel.id);
+          setPreviousModelId((prev) => prev ?? preferredModel.id);
         }
       } catch (error) {
         if (!isMounted) {
@@ -1126,17 +1128,17 @@ export default function OverlayPage() {
     return mediaModels[0] ?? null;
   }, [selectedMediaModel, mediaModels]);
 
-  // Track previous style when changing styles (but not when reverting from custom)
+  // Track previous model when changing models (but not when reverting from custom)
   useEffect(() => {
-    const currentStyleId = generationSettings.styleId;
+    const currentModelId = generationSettings.styleId;
     if (
-      currentStyleId &&
-      currentStyleId !== "custom" &&
-      currentStyleId !== previousStyleId
+      currentModelId &&
+      currentModelId !== "custom" &&
+      currentModelId !== previousModelId
     ) {
-      setPreviousStyleId(currentStyleId);
+      setPreviousModelId(currentModelId);
     }
-  }, [generationSettings.styleId, previousStyleId]);
+  }, [generationSettings.styleId, previousModelId]);
 
   // Save state to history
   const saveToHistory = useCallback(() => {
@@ -1864,6 +1866,12 @@ export default function OverlayPage() {
   // Handle context menu actions
   const { processGenerationResult, extractJobAsset } = useImageGeneration();
 
+  // Image-to-image logic
+  const imageToImage = useImageToImage({
+    images,
+    selectedIds,
+  });
+
   const handleRun = useCallback(async () => {
     const prompt = generationSettings.prompt.trim();
 
@@ -1884,8 +1892,8 @@ export default function OverlayPage() {
       ) {
         return generationSettings.styleId;
       }
-      if (generationSettings.styleId === "custom" && previousStyleId) {
-        return previousStyleId;
+      if (generationSettings.styleId === "custom" && previousModelId) {
+        return previousModelId;
       }
       return displayMediaModel?.id;
     })();
@@ -1903,20 +1911,12 @@ export default function OverlayPage() {
       return;
     }
 
-    if (targetModel.type !== "image") {
+    // Allow image, upscale, and video models
+    const allowedTypes = ["image", "upscale", "video"];
+    if (!allowedTypes.includes(targetModel.type)) {
       toast({
         title: "Unsupported model",
-        description: "Only image models are supported in the canvas right now.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (selectedIds.length > 0) {
-      toast({
-        title: "Image style transfer not yet supported",
-        description:
-          "Applying a model to existing images will be available soon. Deselect images to run a prompt-only generation.",
+        description: `Model type "${targetModel.type}" is not supported in the canvas.`,
         variant: "destructive",
       });
       return;
@@ -1987,6 +1987,10 @@ export default function OverlayPage() {
       }
     });
 
+    // Prepare parameters for image-to-image if applicable
+    const { parameters: finalParameters, endpoint } =
+      imageToImage.prepareParameters(targetModel, parameters);
+
     // Set up active generations for all placeholders with a shared runId
     // This will be updated with the actual runId after the API call
     setActiveGenerations((prev) => {
@@ -1996,7 +2000,7 @@ export default function OverlayPage() {
           prompt,
           loraUrl: generationSettings.loraUrl,
           modelId: targetModel.id,
-          parameters,
+          parameters: finalParameters,
           status: "queued",
           createdAt: Date.now(),
           placeholderIds, // Track all related placeholders
@@ -2016,7 +2020,8 @@ export default function OverlayPage() {
         credentials: "include",
         body: JSON.stringify({
           modelId: targetModel.id,
-          parameters,
+          endpoint, // Use resolved endpoint
+          parameters: finalParameters,
         }),
       });
 
@@ -2200,7 +2205,7 @@ export default function OverlayPage() {
     generationSettings.styleId,
     mediaModels,
     modelParameters,
-    previousStyleId,
+    previousModelId,
     saveToStorage,
     selectedIds,
     setActiveGenerations,
@@ -2211,6 +2216,7 @@ export default function OverlayPage() {
     viewport.x,
     viewport.y,
     viewport.scale,
+    imageToImage,
   ]);
 
   const handleDelete = () => {
@@ -3476,7 +3482,7 @@ export default function OverlayPage() {
           </ContextMenu>
 
           <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-2">
-            {/* Fal logo */}
+            {/* Unite logo */}
             <div className="md:hidden border bg-background/80 py-2 px-3 flex flex-row rounded-xl gap-2 items-center">
               <Link
                 href="https://unite.ai"
@@ -3791,9 +3797,9 @@ export default function OverlayPage() {
                         size="icon"
                         className="flex items-center gap-2"
                         onClick={() => {
-                          // Find the previous style to restore its settings
+                          // Find the previous model to restore its settings
                           const prevModel = mediaModels.find(
-                            (model) => model.id === previousStyleId,
+                            (model) => model.id === previousModelId,
                           );
 
                           if (prevModel) {
@@ -3817,7 +3823,7 @@ export default function OverlayPage() {
                   <Button
                     variant="secondary"
                     className="flex items-center gap-2"
-                    onClick={() => setIsStyleDialogOpen(true)}
+                    onClick={() => setIsModelDialogOpen(true)}
                   >
                     {(() => {
                       if (generationSettings.styleId === "custom") {
@@ -4087,147 +4093,33 @@ export default function OverlayPage() {
         </div>
       </main>
 
-      {/* Style Selection Dialog */}
-      <Dialog open={isStyleDialogOpen} onOpenChange={setIsStyleDialogOpen}>
-        <DialogContent className="w-[95vw] max-w-4xl max-h-[80vh] overflow-hidden">
-          <DialogHeader>
-            <DialogTitle>Choose a Style</DialogTitle>
-            <DialogDescription>
-              Select a style to apply to your images or choose Custom to use
-              your own LoRA
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="relative">
-            {/* Fixed gradient overlays outside scrollable area */}
-            <div className="pointer-events-none absolute -top-[1px] left-0 right-0 z-30 h-4 md:h-12 bg-gradient-to-b from-background via-background/90 to-transparent" />
-            <div className="pointer-events-none absolute -bottom-[1px] left-0 right-0 z-30 h-4 md:h-12 bg-gradient-to-t from-background via-background/90 to-transparent" />
-
-            {/* Scrollable content container */}
-            <div className="overflow-y-auto max-h-[60vh] px-1">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pt-4 pb-6 md:pt-8 md:pb-12">
-                {/* Custom option */}
-                <button
-                  onClick={() => {
-                    setGenerationSettings((prev) => ({
-                      ...prev,
-                      loraUrl: "",
-                      prompt: "",
-                      styleId: "custom",
-                    }));
-                    setIsStyleDialogOpen(false);
-                  }}
-                  className={cn(
-                    "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
-                    generationSettings.styleId === "custom"
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/50",
-                  )}
-                >
-                  <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center">
-                    <Plus className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <span className="text-sm font-medium">Custom</span>
-                </button>
-
-                {isModelsLoading ? (
-                  <div className="col-span-full flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                    <SpinnerIcon className="h-4 w-4 animate-spin" />
-                    <span>Loading models...</span>
-                  </div>
-                ) : modelsError ? (
-                  <div className="col-span-full flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
-                    <span>Failed to load models.</span>
-                    <span className="text-xs text-muted-foreground/80">
-                      {modelsError}
-                    </span>
-                  </div>
-                ) : mediaModels.length === 0 ? (
-                  <div className="col-span-full flex items-center justify-center py-10 text-sm text-muted-foreground">
-                    No models available for your workspace.
-                  </div>
-                ) : (
-                  mediaModels.map((model) => {
-                    const isSelected = generationSettings.styleId === model.id;
-                    const artwork = model.ui?.image || model.ui?.icon;
-                    const shouldRenderArtwork = isRenderableMediaUrl(artwork);
-                    const artworkUrl = shouldRenderArtwork
-                      ? (artwork as string)
-                      : "";
-                    const typeLabel = model.type.replace(/_/g, " ");
-
-                    return (
-                      <div
-                        key={model.id}
-                        className={cn(
-                          "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
-                          isSelected
-                            ? "border-primary bg-primary/10"
-                            : "border-border hover:border-primary/50",
-                        )}
-                      >
-                        <button
-                          onClick={() => {
-                            setGenerationSettings((prev) => ({
-                              ...prev,
-                              loraUrl: "",
-                              styleId: model.id,
-                            }));
-                            setIsStyleDialogOpen(false);
-                          }}
-                          className="w-full h-full absolute inset-0 z-10"
-                        />
-                        <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-muted flex items-center justify-center">
-                          {shouldRenderArtwork ? (
-                            isVideoAsset(artworkUrl) ? (
-                              <video
-                                src={artworkUrl}
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <img
-                                src={artworkUrl}
-                                alt={model.name}
-                                className="w-full h-full object-cover"
-                              />
-                            )
-                          ) : (
-                            <div className="flex flex-col items-center justify-center gap-1 p-3 text-center text-xs text-muted-foreground">
-                              <span className="text-lg font-semibold uppercase">
-                                {model.name.slice(0, 2).toUpperCase()}
-                              </span>
-                              <span className="text-[11px] uppercase tracking-wide text-muted-foreground/70">
-                                {typeLabel}
-                              </span>
-                            </div>
-                          )}
-                          {isSelected && (
-                            <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                              <Check className="h-6 w-6 text-primary" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col items-center gap-1 text-center">
-                          <span className="text-sm font-medium">
-                            {model.name}
-                          </span>
-                          <span className="text-xs text-muted-foreground capitalize">
-                            {typeLabel}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Model Selection Dialog */}
+      <ModelSelectionDialog
+        open={isModelDialogOpen}
+        onOpenChange={setIsModelDialogOpen}
+        models={mediaModels}
+        selectedModelId={generationSettings.styleId}
+        hasSelectedImages={imageToImage.hasSelectedImages}
+        isLoading={isModelsLoading}
+        error={modelsError}
+        onModelSelect={(modelId) => {
+          setGenerationSettings((prev) => ({
+            ...prev,
+            loraUrl: "",
+            styleId: modelId,
+          }));
+          setIsModelDialogOpen(false);
+        }}
+        onCustomSelect={() => {
+          setGenerationSettings((prev) => ({
+            ...prev,
+            loraUrl: "",
+            prompt: "",
+            styleId: "custom",
+          }));
+          setIsModelDialogOpen(false);
+        }}
+      />
 
       {/* Settings dialog */}
       <Dialog
