@@ -100,10 +100,14 @@ import { CanvasContextMenu } from "@/components/canvas/CanvasContextMenu";
 import { useTheme } from "next-themes";
 import { VideoOverlays } from "@/components/canvas/VideoOverlays";
 import { DimensionDisplay } from "@/components/canvas/DimensionDisplay";
+import { ModelDetailsDialog } from "@/components/canvas/ModelDetailsDialog";
+import { ModelParametersButton } from "@/components/canvas/ModelParametersButton";
 
 // Import handlers
 import { uploadImageDirect } from "@/lib/handlers/generation-handler";
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
+import { useImageGeneration } from "@/hooks/useImageGeneration";
+import { createCanvasImagesFromAssets } from "@/utils/imageGeneration";
 import {
   Select,
   SelectContent,
@@ -232,6 +236,13 @@ export default function OverlayPage() {
   const [showMinimap, setShowMinimap] = useState(true);
   const [isStyleDialogOpen, setIsStyleDialogOpen] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
+  const [isModelDetailsDialogOpen, setIsModelDetailsDialogOpen] =
+    useState(false);
+  const [selectedModelForDetails, setSelectedModelForDetails] =
+    useState<MediaModel | null>(null);
+  const [modelParameters, setModelParameters] = useState<Record<string, any>>(
+    {},
+  );
   const [isImageToVideoDialogOpen, setIsImageToVideoDialogOpen] =
     useState(false);
   const [selectedImageForVideo, setSelectedImageForVideo] = useState<
@@ -1873,47 +1884,7 @@ export default function OverlayPage() {
   // Users can now manually combine images via the context menu before running generation
 
   // Handle context menu actions
-  const extractJobAsset = useCallback((job: any) => {
-    const result =
-      job?.result ||
-      job?.output?.result ||
-      job?.output?.data?.result ||
-      job?.output?.output?.result;
-    if (!result) {
-      return null;
-    }
-
-    if (result.r2OriginalUrl || result.r2_thumbnail_url) {
-      return {
-        url: (result.r2OriginalUrl || result.r2_thumbnail_url) as string,
-        width: result.metadata?.width,
-        height: result.metadata?.height,
-      };
-    }
-
-    if (result.url) {
-      return {
-        url: result.url as string,
-        width: result.metadata?.width,
-        height: result.metadata?.height,
-      };
-    }
-
-    if (Array.isArray(result.images) && result.images.length > 0) {
-      const asset =
-        result.images.find((img: any) => img.r2OriginalUrl || img.url) ||
-        result.images[0];
-      return {
-        url: (asset.r2OriginalUrl ||
-          asset.r2_thumbnail_url ||
-          asset.url) as string,
-        width: asset.metadata?.width ?? result.metadata?.width,
-        height: asset.metadata?.height ?? result.metadata?.height,
-      };
-    }
-
-    return null;
-  }, []);
+  const { processGenerationResult, extractJobAsset } = useImageGeneration();
 
   const handleRun = useCallback(async () => {
     const prompt = generationSettings.prompt.trim();
@@ -2008,6 +1979,16 @@ export default function OverlayPage() {
     if (generationSettings.styleId && generationSettings.styleId !== "custom") {
       parameters.styleId = generationSettings.styleId;
     }
+    // Include model parameters
+    Object.keys(modelParameters).forEach((key) => {
+      if (
+        modelParameters[key] !== undefined &&
+        modelParameters[key] !== null &&
+        modelParameters[key] !== ""
+      ) {
+        parameters[key] = modelParameters[key];
+      }
+    });
 
     setActiveGenerations((prev) => {
       const next = new Map(prev);
@@ -2054,6 +2035,11 @@ export default function OverlayPage() {
 
       const runId = job.runId || realtime.runId || job.id;
       const status = job.status ?? "queued";
+      console.log("Job received:", {
+        runId,
+        status,
+        jobType: job.type || "unknown",
+      });
 
       setActiveGenerations((prev) => {
         const existing = prev.get(placeholderId);
@@ -2073,30 +2059,54 @@ export default function OverlayPage() {
         return next;
       });
 
-      if (status === "completed") {
-        const asset = extractJobAsset(job);
-        if (!asset?.url) {
-          throw new Error("Generation completed but no output was returned.");
+      console.log("Job status:", status);
+
+      if (status === "completed" || status === "COMPLETED") {
+        console.log("Processing completed job:", job);
+        const result = processGenerationResult(job);
+        console.log("Generation result:", result);
+
+        if (!result.success) {
+          throw new Error(result.error || "Generation failed");
         }
 
-        setImages((prev) =>
-          prev.map((img) =>
-            img.id === placeholderId
-              ? {
-                  ...img,
-                  src: asset.url,
-                  width:
-                    asset.width && asset.width > 0
-                      ? Math.min(asset.width, 1024)
-                      : img.width,
-                  height:
-                    asset.height && asset.height > 0
-                      ? Math.min(asset.height, 1024)
-                      : img.height,
-                }
-              : img,
-          ),
+        console.log("Assets found:", result.assets.length);
+        result.assets.forEach((asset, i) =>
+          console.log(`Asset ${i}:`, asset.url),
         );
+
+        const { updatedPlaceholder, newImages } = createCanvasImagesFromAssets(
+          result.assets,
+          placeholderId,
+          viewport,
+          canvasSize,
+        );
+
+        console.log("Canvas images created:", {
+          updatedPlaceholder: !!updatedPlaceholder,
+          newImagesCount: newImages.length,
+        });
+
+        if (updatedPlaceholder) {
+          // Update placeholder and add new images in a single atomic operation
+          console.log("Updating canvas with all images:", {
+            placeholder: true,
+            newImagesCount: newImages.length,
+            totalImages: 1 + newImages.length,
+          });
+
+          setImages((prev) => [
+            ...prev.map((img) =>
+              img.id === placeholderId ? updatedPlaceholder : img,
+            ),
+            ...newImages,
+          ]);
+
+          // Select all generated images
+          if (newImages.length > 0) {
+            setSelectedIds([placeholderId, ...newImages.map((img) => img.id)]);
+          }
+        }
 
         setActiveGenerations((prev) => {
           const next = new Map(prev);
@@ -2143,10 +2153,13 @@ export default function OverlayPage() {
     canvasSize.width,
     displayMediaModel,
     extractJobAsset,
+    processGenerationResult,
+    createCanvasImagesFromAssets,
     generationSettings.loraUrl,
     generationSettings.prompt,
     generationSettings.styleId,
     mediaModels,
+    modelParameters,
     previousStyleId,
     saveToStorage,
     selectedIds,
@@ -3828,7 +3841,6 @@ export default function OverlayPage() {
                     )}
                   </div>
                 )}
-
                 {/* Style dropdown and Run button */}
                 <div className="flex items-center justify-between">
                   {/* Style selector button */}
@@ -3919,6 +3931,14 @@ export default function OverlayPage() {
                     })()}
                     <ChevronDown className="h-4 w-4" />
                   </Button>
+                  {/* Model options button */}
+                  <ModelParametersButton
+                    model={selectedMediaModel}
+                    onOpenParameters={(model) => {
+                      setSelectedModelForDetails(model);
+                      setIsModelDetailsDialogOpen(true);
+                    }}
+                  />
                   <div className="flex items-center gap-2">
                     {/* Attachment button */}
                     <TooltipProvider>
@@ -4167,16 +4187,8 @@ export default function OverlayPage() {
                     const typeLabel = model.type.replace(/_/g, " ");
 
                     return (
-                      <button
+                      <div
                         key={model.id}
-                        onClick={() => {
-                          setGenerationSettings((prev) => ({
-                            ...prev,
-                            loraUrl: "",
-                            styleId: model.id,
-                          }));
-                          setIsStyleDialogOpen(false);
-                        }}
                         className={cn(
                           "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
                           isSelected
@@ -4184,6 +4196,17 @@ export default function OverlayPage() {
                             : "border-border hover:border-primary/50",
                         )}
                       >
+                        <button
+                          onClick={() => {
+                            setGenerationSettings((prev) => ({
+                              ...prev,
+                              loraUrl: "",
+                              styleId: model.id,
+                            }));
+                            setIsStyleDialogOpen(false);
+                          }}
+                          className="w-full h-full absolute inset-0 z-10"
+                        />
                         <div className="relative w-full aspect-square rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                           {shouldRenderArtwork ? (
                             isVideoAsset(artworkUrl) ? (
@@ -4226,7 +4249,7 @@ export default function OverlayPage() {
                             {typeLabel}
                           </span>
                         </div>
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -4510,6 +4533,16 @@ export default function OverlayPage() {
         viewport={viewport}
         hiddenVideoControlsIds={hiddenVideoControlsIds}
         setVideos={setVideos}
+      />
+      {/* Model Details Dialog */}
+      <ModelDetailsDialog
+        open={isModelDetailsDialogOpen}
+        onOpenChange={setIsModelDetailsDialogOpen}
+        model={selectedModelForDetails}
+        onSave={(parameters) => {
+          setModelParameters(parameters);
+          console.log("Parâmetros salvos:", parameters);
+        }}
       />
     </div>
   );
