@@ -66,6 +66,8 @@ export interface ActiveGeneration {
   error?: string;
   sourceImageUrl?: string;
   realtimeToken?: string | null;
+  placeholderIds?: string[];
+  isCoordinator?: boolean;
 }
 
 export interface ActiveVideoGeneration {

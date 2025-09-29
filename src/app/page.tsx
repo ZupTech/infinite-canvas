@@ -53,6 +53,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useMultiImageGeneration } from "@/hooks/useMultiImageGeneration";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
@@ -288,7 +289,6 @@ export default function OverlayPage() {
     const currentCount =
       activeGenerations.size +
       activeVideoGenerations.size +
-      (isGenerating ? 1 : 0) +
       (isRemovingVideoBackground ? 1 : 0) +
       (isIsolating ? 1 : 0) +
       (isExtendingVideo ? 1 : 0) +
@@ -882,6 +882,17 @@ export default function OverlayPage() {
       setIsSaving(false);
     }
   }, [images, videos, viewport]);
+
+  const multiImageHandlers = useMultiImageGeneration({
+    activeGenerations,
+    setActiveGenerations,
+    setImages,
+    setSelectedIds,
+    setIsGenerating,
+    saveToStorage,
+    viewport,
+    canvasSize,
+  });
 
   // Load state from storage
   const loadFromStorage = useCallback(async () => {
@@ -1915,27 +1926,40 @@ export default function OverlayPage() {
 
     setIsGenerating(true);
 
-    const placeholderId = `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Get number of images to generate from model parameters, default to 1
+    const numImages = Math.max(
+      1,
+      Math.min(4, Number(modelParameters.num_images) || 1),
+    );
+
+    // Create multiple placeholders for multiple images
+    const placeholderIds: string[] = [];
+    const newPlaceholders: any[] = [];
     const baseSize = 512;
     const viewportCenterX =
       (canvasSize.width / 2 - viewport.x) / viewport.scale;
     const viewportCenterY =
       (canvasSize.height / 2 - viewport.y) / viewport.scale;
 
-    setImages((prev) => [
-      ...prev,
-      {
+    for (let i = 0; i < numImages; i++) {
+      const placeholderId = `generated-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${i}`;
+      placeholderIds.push(placeholderId);
+
+      const offset = i * 20; // Offset each placeholder slightly
+      newPlaceholders.push({
         id: placeholderId,
         src: "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
-        x: viewportCenterX - baseSize / 2,
-        y: viewportCenterY - baseSize / 2,
+        x: viewportCenterX - baseSize / 2 + offset,
+        y: viewportCenterY - baseSize / 2 + offset,
         width: baseSize,
         height: baseSize,
         rotation: 0,
         isGenerated: true,
-      },
-    ]);
-    setSelectedIds([placeholderId]);
+      });
+    }
+
+    setImages((prev) => [...prev, ...newPlaceholders]);
+    setSelectedIds(placeholderIds);
 
     const parameters: Record<string, any> = {
       prompt,
@@ -1959,15 +1983,21 @@ export default function OverlayPage() {
       }
     });
 
+    // Set up active generations for all placeholders with a shared runId
+    // This will be updated with the actual runId after the API call
     setActiveGenerations((prev) => {
       const next = new Map(prev);
-      next.set(placeholderId, {
-        prompt,
-        loraUrl: generationSettings.loraUrl,
-        modelId: targetModel.id,
-        parameters,
-        status: "queued",
-        createdAt: Date.now(),
+      placeholderIds.forEach((placeholderId, index) => {
+        next.set(placeholderId, {
+          prompt,
+          loraUrl: generationSettings.loraUrl,
+          modelId: targetModel.id,
+          parameters,
+          status: "queued",
+          createdAt: Date.now(),
+          placeholderIds, // Track all related placeholders
+          isCoordinator: index === 0, // First placeholder is the coordinator
+        });
       });
       return next;
     });
@@ -2011,20 +2041,25 @@ export default function OverlayPage() {
       });
 
       setActiveGenerations((prev) => {
-        const existing = prev.get(placeholderId);
-        if (!existing) {
-          return prev;
-        }
-
         const next = new Map(prev);
-        next.set(placeholderId, {
-          ...existing,
-          jobId: job.id,
-          runId,
-          status,
-          realtimeToken: realtime.token ?? null,
-          resultUrl: extractJobAsset(job)?.url ?? existing.resultUrl,
+
+        // Update all placeholders with the same runId
+        placeholderIds.forEach((placeholderId) => {
+          const existing = prev.get(placeholderId);
+          if (existing) {
+            next.set(placeholderId, {
+              ...existing,
+              jobId: job.id,
+              runId,
+              status,
+              realtimeToken: realtime.token ?? null,
+              resultUrl: extractJobAsset(job)?.url ?? existing.resultUrl,
+              // Preserve coordinator status
+              isCoordinator: existing.isCoordinator,
+            });
+          }
         });
+
         return next;
       });
 
@@ -2040,46 +2075,76 @@ export default function OverlayPage() {
         }
 
         console.log("Assets found:", result.assets.length);
+        console.log("Placeholder IDs:", placeholderIds);
         result.assets.forEach((asset, i) =>
           console.log(`Asset ${i}:`, asset.url),
         );
 
-        const { updatedPlaceholder, newImages } = createCanvasImagesFromAssets(
+        const { updatedPlaceholders, newImages } = createCanvasImagesFromAssets(
           result.assets,
-          placeholderId,
+          placeholderIds,
           viewport,
           canvasSize,
         );
 
         console.log("Canvas images created:", {
-          updatedPlaceholder: !!updatedPlaceholder,
+          updatedPlaceholdersCount: updatedPlaceholders.length,
           newImagesCount: newImages.length,
         });
 
-        if (updatedPlaceholder) {
-          // Update placeholder and add new images in a single atomic operation
+        if (updatedPlaceholders.length > 0) {
+          // Update placeholders and add new images in a single atomic operation
           console.log("Updating canvas with all images:", {
-            placeholder: true,
+            placeholdersCount: updatedPlaceholders.length,
             newImagesCount: newImages.length,
-            totalImages: 1 + newImages.length,
+            totalImages: updatedPlaceholders.length + newImages.length,
           });
 
-          setImages((prev) => [
-            ...prev.map((img) =>
-              img.id === placeholderId ? updatedPlaceholder : img,
-            ),
-            ...newImages,
-          ]);
+          setImages((prev) => {
+            // Create a map for quick placeholder lookup
+            const placeholderMap = new Map(
+              updatedPlaceholders.map((p) => [p.id, p]),
+            );
+
+            console.log("Applying images update:", {
+              prevCount: prev.length,
+              placeholderMapSize: placeholderMap.size,
+              newImagesCount: newImages.length,
+              placeholderMap: Array.from(placeholderMap.entries()).map(
+                ([id, img]) => ({ id, src: img.src }),
+              ),
+            });
+
+            const updatedPrev = prev.map((img) => {
+              const replacement = placeholderMap.get(img.id);
+              if (replacement) {
+                console.log(
+                  `Replacing placeholder ${img.id} with ${replacement.src}`,
+                );
+              }
+              return replacement || img;
+            });
+
+            const finalImages = [...updatedPrev, ...newImages];
+
+            console.log("Final images count:", finalImages.length);
+            return finalImages;
+          });
 
           // Select all generated images
-          if (newImages.length > 0) {
-            setSelectedIds([placeholderId, ...newImages.map((img) => img.id)]);
+          const allGeneratedIds = [
+            ...updatedPlaceholders.map((p) => p.id),
+            ...newImages.map((img) => img.id),
+          ];
+          if (allGeneratedIds.length > 0) {
+            setSelectedIds(allGeneratedIds);
           }
         }
 
         setActiveGenerations((prev) => {
           const next = new Map(prev);
-          next.delete(placeholderId);
+          // Clean up all placeholders
+          placeholderIds.forEach((id) => next.delete(id));
           return next;
         });
         setIsGenerating(false);
@@ -2103,10 +2168,12 @@ export default function OverlayPage() {
           ? error.message || "Failed to start generation"
           : "Failed to start generation";
 
-      setImages((prev) => prev.filter((img) => img.id !== placeholderId));
+      setImages((prev) =>
+        prev.filter((img) => !placeholderIds.includes(img.id)),
+      );
       setActiveGenerations((prev) => {
         const next = new Map(prev);
-        next.delete(placeholderId);
+        placeholderIds.forEach((id) => next.delete(id));
         return next;
       });
       setIsGenerating(false);
@@ -2954,68 +3021,12 @@ export default function OverlayPage() {
           key={imageId}
           imageId={imageId}
           generation={generation}
-          onStatus={(id, status, job) => {
-            setActiveGenerations((prev) => {
-              const existing = prev.get(id);
-              if (!existing) {
-                return prev;
-              }
-
-              const next = new Map(prev);
-              next.set(id, {
-                ...existing,
-                status,
-                jobId: job?.id,
-                runId: job?.runId ?? existing.runId,
-              });
-              return next;
-            });
-          }}
-          onComplete={(id, finalUrl, payload) => {
-            setImages((prev) =>
-              prev.map((img) =>
-                img.id === id
-                  ? {
-                      ...img,
-                      src: finalUrl,
-                      width:
-                        payload?.asset?.width && payload.asset.width > 0
-                          ? Math.min(payload.asset.width, 1024)
-                          : img.width,
-                      height:
-                        payload?.asset?.height && payload.asset.height > 0
-                          ? Math.min(payload.asset.height, 1024)
-                          : img.height,
-                    }
-                  : img,
-              ),
-            );
-            setActiveGenerations((prev) => {
-              const newMap = new Map(prev);
-              newMap.delete(id);
-              if (newMap.size === 0) {
-                setIsGenerating(false);
-              }
-              return newMap;
-            });
-
-            // Immediately save after generation completes
-            setTimeout(() => {
-              saveToStorage();
-            }, 100); // Small delay to ensure state updates are processed
-          }}
+          onStatus={multiImageHandlers.onStatus}
+          onComplete={multiImageHandlers.onComplete}
           onError={(id, error) => {
             console.error(`Generation error for ${id}:`, error);
-            // Remove the failed image
+            multiImageHandlers.onError(id, error);
             setImages((prev) => prev.filter((img) => img.id !== id));
-            setActiveGenerations((prev) => {
-              const newMap = new Map(prev);
-              newMap.delete(id);
-              if (newMap.size === 0) {
-                setIsGenerating(false);
-              }
-              return newMap;
-            });
             toast({
               title: "Generation failed",
               description: error.toString(),
@@ -3536,7 +3547,6 @@ export default function OverlayPage() {
                         activeGenerationsSize={
                           activeGenerations.size +
                           activeVideoGenerations.size +
-                          (isGenerating ? 1 : 0) +
                           (isRemovingVideoBackground ? 1 : 0) +
                           (isIsolating ? 1 : 0) +
                           (isExtendingVideo ? 1 : 0) +
