@@ -1,15 +1,8 @@
 "use client";
 
-import React, {
-  useState,
-  useCallback,
-  useRef,
-  useEffect,
-  useMemo,
-} from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import { Stage, Layer, Rect, Group, Line } from "react-konva";
 import Konva from "konva";
-import { canvasStorage, type CanvasState } from "@/lib/storage";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -75,20 +68,12 @@ import { ImageToVideoDialog } from "@/components/canvas/ImageToVideoDialog";
 import type {
   PlacedImage,
   PlacedVideo,
-  HistoryState,
   GenerationSettings,
   VideoGenerationSettings,
   ActiveGeneration,
-  ActiveVideoGeneration,
   SelectionBox,
 } from "@/types/canvas";
-
-import {
-  imageToCanvasElement,
-  videoToCanvasElement,
-} from "@/utils/canvas-utils";
 import { checkOS } from "@/utils/os-utils";
-import { convertImageToVideo } from "@/utils/video-utils";
 
 // Import additional extracted components
 import { CanvasGrid } from "@/components/canvas/CanvasGrid";
@@ -109,16 +94,8 @@ import { ModelSelectionDialog } from "@/components/canvas/ModelSelectionDialog";
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
 import { useImageGeneration } from "@/hooks/useImageGeneration";
 import { createCanvasImagesFromAssets } from "@/utils/imageGeneration";
-import {
-  PLACEHOLDER_DATA_URI,
-  shouldSkipStorage,
-} from "@/utils/placeholder-utils";
+import { PLACEHOLDER_DATA_URI } from "@/utils/placeholder-utils";
 import { useImageToImage } from "@/hooks/useImageToImage";
-import {
-  resolveModelEndpoint,
-  getImageInputParamName,
-  filterModelParameters,
-} from "@/utils/model-utils";
 import {
   Select,
   SelectContent,
@@ -128,57 +105,16 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { GenerationsIndicator } from "@/components/generations-indicator";
-
-type MediaModelType = "image" | "video" | "upscale" | "audio" | "text";
-
-interface MediaModel {
-  id: string;
-  name: string;
-  description?: string;
-  provider?: string;
-  type: string;
-  category?: string | null;
-  visible: boolean;
-  featured?: boolean;
-  isNew?: boolean;
-  hasUnlimitedBadge?: boolean;
-  modelId?: string | null;
-  restricted?: boolean | null;
-  ui?: {
-    icon?: string | null;
-    color?: string | null;
-    layout?: string | null;
-    image?: string | null;
-    resolution?: string | null;
-  };
-  [key: string]: any;
-}
-
-interface ModelsResponse {
-  ui?: Record<string, unknown>;
-  models?: MediaModel[];
-}
-
-const DISPLAYABLE_MODEL_TYPES = ["image", "video", "audio", "upscale"] as const;
-
-type DisplayableModelType = (typeof DISPLAYABLE_MODEL_TYPES)[number];
-
-const isRenderableMediaUrl = (value?: string | null) =>
-  typeof value === "string" &&
-  (value.startsWith("http") || value.startsWith("/"));
-
-const isVideoAsset = (value?: string | null) =>
-  typeof value === "string" && /\.webm($|\?)/i.test(value);
-
-const isDisplayableType = (type?: string): type is DisplayableModelType => {
-  if (!type) {
-    return false;
-  }
-
-  return DISPLAYABLE_MODEL_TYPES.includes(
-    type.toLowerCase() as DisplayableModelType,
-  );
-};
+import {
+  isRenderableMediaUrl,
+  isVideoAsset,
+  type MediaModel,
+} from "@/features/overlay/types";
+import { useMediaModels } from "@/features/overlay/hooks/useMediaModels";
+import { useCanvasPreferences } from "@/features/overlay/hooks/useCanvasPreferences";
+import { useCanvasHistory } from "@/features/overlay/hooks/useCanvasHistory";
+import { useCanvasPersistence } from "@/features/overlay/hooks/useCanvasPersistence";
+import { useVideoGenerations } from "@/features/overlay/hooks/useVideoGenerations";
 
 export default function OverlayPage() {
   const { theme, setTheme } = useTheme();
@@ -196,16 +132,9 @@ export default function OverlayPage() {
       prompt: "",
       loraUrl: "",
     });
-  const [previousModelId, setPreviousModelId] = useState<string | null>(null);
-  const [mediaModels, setMediaModels] = useState<MediaModel[]>([]);
-  const [isModelsLoading, setIsModelsLoading] = useState(true);
-  const [modelsError, setModelsError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [activeGenerations, setActiveGenerations] = useState<
     Map<string, ActiveGeneration>
-  >(new Map());
-  const [activeVideoGenerations, setActiveVideoGenerations] = useState<
-    Map<string, ActiveVideoGeneration>
   >(new Map());
   const [selectionBox, setSelectionBox] = useState<SelectionBox>({
     startX: 0,
@@ -215,8 +144,6 @@ export default function OverlayPage() {
     visible: false,
   });
   const [isSelecting, setIsSelecting] = useState(false);
-  const [history, setHistory] = useState<HistoryState[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
   const [dragStartPositions, setDragStartPositions] = useState<
     Map<string, { x: number; y: number }>
   >(new Map());
@@ -243,8 +170,6 @@ export default function OverlayPage() {
   const [isolateInputValue, setIsolateInputValue] = useState("");
   const [isIsolating, setIsIsolating] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [showGrid, setShowGrid] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(true);
   const [isModelDialogOpen, setIsModelDialogOpen] = useState(false);
   const [isApiKeyDialogOpen, setIsApiKeyDialogOpen] = useState(false);
   const [isModelDetailsDialogOpen, setIsModelDetailsDialogOpen] =
@@ -255,34 +180,126 @@ export default function OverlayPage() {
     {},
   );
 
-  const [isImageToVideoDialogOpen, setIsImageToVideoDialogOpen] =
-    useState(false);
-  const [selectedImageForVideo, setSelectedImageForVideo] = useState<
-    string | null
-  >(null);
-  const [isConvertingToVideo, setIsConvertingToVideo] = useState(false);
-  const [isVideoToVideoDialogOpen, setIsVideoToVideoDialogOpen] =
-    useState(false);
-  const [selectedVideoForVideo, setSelectedVideoForVideo] = useState<
-    string | null
-  >(null);
-  const [isTransformingVideo, setIsTransformingVideo] = useState(false);
-  const [isExtendVideoDialogOpen, setIsExtendVideoDialogOpen] = useState(false);
-  const [selectedVideoForExtend, setSelectedVideoForExtend] = useState<
-    string | null
-  >(null);
-  const [isExtendingVideo, setIsExtendingVideo] = useState(false);
-  const [
+  const { showGrid, setShowGrid, showMinimap, setShowMinimap } =
+    useCanvasPreferences();
+
+  const {
+    mediaModels,
+    isModelsLoading,
+    modelsError,
+    selectedMediaModel,
+    displayMediaModel,
+    previousModelId,
+    resolveModelId,
+  } = useMediaModels({
+    generationSettings,
+    setGenerationSettings,
+  });
+
+  const { history, historyIndex, canUndo, canRedo, saveToHistory, undo, redo } =
+    useCanvasHistory({
+      images,
+      videos,
+      selectedIds,
+      setImages,
+      setVideos,
+      setSelectedIds,
+    });
+
+  const {
+    isStorageLoaded,
+    saveToStorage,
+    loadFromStorage,
+    handleFileUpload: uploadFilesToCanvas,
+    handleDrop: persistDrop,
+    loadDefaultImages,
+  } = useCanvasPersistence({
+    images,
+    videos,
+    viewport,
+    canvasSize,
+    setImages,
+    setVideos,
+    setViewport,
+    toast,
+  });
+
+  const {
+    activeVideoGenerations,
+    isImageToVideoDialogOpen,
+    openImageToVideoDialog,
+    closeImageToVideoDialog,
+    isVideoToVideoDialogOpen,
+    openVideoToVideoDialog,
+    closeVideoToVideoDialog,
+    isExtendVideoDialogOpen,
+    openExtendVideoDialog,
+    closeExtendVideoDialog,
     isRemoveVideoBackgroundDialogOpen,
-    setIsRemoveVideoBackgroundDialogOpen,
-  ] = useState(false);
-  const [
+    openRemoveVideoBackgroundDialog,
+    closeRemoveVideoBackgroundDialog,
+    isConvertingToVideo,
+    isTransformingVideo,
+    isExtendingVideo,
+    isRemovingVideoBackground,
+    selectedImageForVideo,
+    selectedVideoForVideo,
+    selectedVideoForExtend,
     selectedVideoForBackgroundRemoval,
-    setSelectedVideoForBackgroundRemoval,
-  ] = useState<string | null>(null);
-  const [isRemovingVideoBackground, setIsRemovingVideoBackground] =
-    useState(false);
-  const [_, setIsSaving] = useState(false);
+    handleImageToVideoConversion,
+    handleVideoToVideoTransformation,
+    handleVideoExtension,
+    handleVideoBackgroundRemoval,
+    handleVideoGenerationComplete,
+    handleVideoGenerationError,
+    handleVideoGenerationProgress,
+    setActiveVideoGenerations,
+  } = useVideoGenerations({
+    images,
+    videos,
+    setVideos,
+    mediaModels,
+    toast,
+    generationSettings,
+    saveToHistory,
+  });
+
+  const handleConvertToVideo = useCallback(
+    (imageId: string) => {
+      if (images.some((img) => img.id === imageId)) {
+        openImageToVideoDialog(imageId);
+      }
+    },
+    [images, openImageToVideoDialog],
+  );
+
+  const handleVideoToVideo = useCallback(
+    (videoId: string) => {
+      if (videos.some((video) => video.id === videoId)) {
+        openVideoToVideoDialog(videoId);
+      }
+    },
+    [openVideoToVideoDialog, videos],
+  );
+
+  const handleExtendVideo = useCallback(
+    (videoId: string) => {
+      if (videos.some((video) => video.id === videoId)) {
+        openExtendVideoDialog(videoId);
+      }
+    },
+    [openExtendVideoDialog, videos],
+  );
+
+  const handleRemoveVideoBackground = useCallback(
+    (videoId: string) => {
+      if (videos.some((video) => video.id === videoId)) {
+        openRemoveVideoBackgroundDialog(videoId);
+      }
+    },
+    [openRemoveVideoBackgroundDialog, videos],
+  );
+
   const [showSuccess, setShowSuccess] = useState(false);
 
   // Touch event states for mobile
@@ -334,601 +351,8 @@ export default function OverlayPage() {
   // TODO: Migrate removeBackground to REST API
   // const { mutateAsync: removeBackground } = useMutation(...);
 
-  // Function to handle the "Convert to Video" option in the context menu
-  const handleConvertToVideo = (imageId: string) => {
-    const image = images.find((img) => img.id === imageId);
-    if (!image) return;
-
-    setSelectedImageForVideo(imageId);
-    setIsImageToVideoDialogOpen(true);
-  };
-
-  // Function to handle the image-to-video conversion
-  const handleImageToVideoConversion = async (
-    settings: VideoGenerationSettings,
-  ) => {
-    if (!selectedImageForVideo) return;
-
-    const image = images.find((img) => img.id === selectedImageForVideo);
-    if (!image) return;
-
-    try {
-      setIsConvertingToVideo(true);
-
-      // Resolve selected model from catalog
-      const modelId =
-        settings.modelId || generationSettings.styleId || undefined;
-      const model = modelId
-        ? mediaModels.find((m) => m.id === modelId)
-        : mediaModels.find((m) => m.type === "video");
-
-      if (!model) {
-        throw new Error("No video model selected.");
-      }
-
-      // Prepare parameters including the selected image URL in the proper field
-      const imageParamName = getImageInputParamName(model) || "image_url";
-      const baseParams: Record<string, any> = { ...settings };
-      delete baseParams.modelId;
-      delete baseParams.sourceUrl;
-
-      const parameters = {
-        ...baseParams,
-        [imageParamName]: image.src,
-      };
-
-      // Try to resolve endpoint (fallback handled by backend if needed)
-      const endpoint = resolveModelEndpoint(
-        model as unknown as MediaModel,
-        true,
-      );
-
-      // Call our backend generate API directly (no TRPC streaming)
-      const response = await fetch("/api/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          modelId: model.id,
-          endpoint,
-          parameters,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "");
-        throw new Error(
-          errorText || `Image-to-video failed with status ${response.status}`,
-        );
-      }
-
-      const payload = await response.json();
-      // Support either { job } wrapper or direct job
-      const job = payload.job ?? payload;
-      const status = (job?.status || job?.output?.status || "unknown")
-        .toString()
-        .toLowerCase();
-
-      if (status !== "completed") {
-        throw new Error(`Generation returned status: ${status}`);
-      }
-
-      // Process result assets
-      const { processGenerationResult } = useImageGeneration();
-      const result = processGenerationResult(job);
-      if (!result.success || result.assets.length === 0) {
-        throw new Error(result.error || "Generation completed with no asset.");
-      }
-
-      const assetUrl = result.assets[0].url;
-      const duration =
-        job?.result?.metadata?.duration ||
-        job?.output?.result?.metadata?.duration ||
-        5;
-
-      // Place the video next to the source image
-      const newVideo = convertImageToVideo(image, assetUrl, duration, false);
-      newVideo.x = image.x + image.width + 20;
-      newVideo.y = image.y;
-
-      setVideos((prev) => [...prev, { ...newVideo, isVideo: true as const }]);
-      saveToHistory();
-
-      toast({
-        title: "Video created",
-        description: "Added next to the source image.",
-      });
-
-      // Close dialog
-      setIsImageToVideoDialogOpen(false);
-    } catch (error) {
-      console.error("Error in image-to-video conversion:", error);
-      toast({
-        title: "Conversion failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to convert image to video",
-        variant: "destructive",
-      });
-    } finally {
-      setIsConvertingToVideo(false);
-    }
-  };
-
-  // Function to handle the "Video to Video" option in the context menu
-  const handleVideoToVideo = (videoId: string) => {
-    const video = videos.find((vid) => vid.id === videoId);
-    if (!video) return;
-
-    setSelectedVideoForVideo(videoId);
-    setIsVideoToVideoDialogOpen(true);
-  };
-
-  // Function to handle the video-to-video transformation
-  const handleVideoToVideoTransformation = async (
-    settings: VideoGenerationSettings,
-  ) => {
-    if (!selectedVideoForVideo) return;
-
-    const video = videos.find((vid) => vid.id === selectedVideoForVideo);
-    if (!video) return;
-
-    try {
-      setIsTransformingVideo(true);
-
-      // Upload video if it's a data URL or local file
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
-      }
-
-      // Create a unique ID for this generation
-      const generationId = `vid2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-      // Add to active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(generationId, {
-          ...settings, // Include all settings first
-          imageUrl: videoUrl, // Using imageUrl field for video URL
-          duration: video.duration || settings.duration || 5,
-          modelId: settings.modelId || "seedance-pro",
-          resolution: settings.resolution || "720p",
-          isVideoToVideo: true,
-          sourceVideoId: selectedVideoForVideo,
-        });
-        return newMap;
-      });
-
-      // Close the dialog
-      setIsVideoToVideoDialogOpen(false);
-
-      // Get video model name for toast display
-      let modelName = "Video Model";
-      const modelId = settings.modelId;
-      if (modelId) {
-        const model = mediaModels.find((m) => m.id === modelId);
-        if (model) {
-          modelName = model.name;
-        }
-      }
-
-      // Create a persistent toast
-      const toastId = toast({
-        title: `Transforming video (${modelName} - ${settings.resolution || "Default"})`,
-        description: "This may take a minute...",
-        duration: Infinity,
-      }).id;
-
-      // Store the toast ID with the generation
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generation = newMap.get(generationId);
-        if (generation) {
-          newMap.set(generationId, {
-            ...generation,
-            toastId,
-          });
-        }
-        return newMap;
-      });
-    } catch (error) {
-      console.error("Error starting video-to-video transformation:", error);
-      toast({
-        title: "Transformation failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to start transformation",
-        variant: "destructive",
-      });
-      setIsTransformingVideo(false);
-    }
-  };
-
-  // Function to handle the "Extend Video" option in the context menu
-  const handleExtendVideo = (videoId: string) => {
-    const video = videos.find((vid) => vid.id === videoId);
-    if (!video) return;
-
-    setSelectedVideoForExtend(videoId);
-    setIsExtendVideoDialogOpen(true);
-  };
-
-  // Function to handle the video extension
-  const handleVideoExtension = async (settings: VideoGenerationSettings) => {
-    if (!selectedVideoForExtend) return;
-
-    const video = videos.find((vid) => vid.id === selectedVideoForExtend);
-    if (!video) return;
-
-    try {
-      setIsExtendingVideo(true);
-
-      // Upload video if it's a data URL or local file
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
-      }
-
-      // Create a unique ID for this generation
-      const generationId = `vid_ext_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-      // Add to active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(generationId, {
-          ...settings, // Include all settings first
-          imageUrl: videoUrl, // Using imageUrl field for video URL
-          duration: video.duration || settings.duration || 5,
-          modelId: settings.modelId || "seedance-pro",
-          resolution: settings.resolution || "720p",
-          isVideoToVideo: true,
-          isVideoExtension: true,
-          sourceVideoId: selectedVideoForExtend,
-        });
-        return newMap;
-      });
-
-      // Close the dialog
-      setIsExtendVideoDialogOpen(false);
-
-      // Get video model name for toast display
-      let modelName = "Video Model";
-      const modelId = settings.modelId;
-      if (modelId) {
-        const model = mediaModels.find((m) => m.id === modelId);
-        if (model) {
-          modelName = model.name;
-        }
-      }
-
-      // Create a persistent toast
-      const toastId = toast({
-        title: `Extending video (${modelName} - ${settings.resolution || "Default"})`,
-        description: "This may take a minute...",
-        duration: Infinity,
-      }).id;
-
-      // Store the toast ID with the generation
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generation = newMap.get(generationId);
-        if (generation) {
-          newMap.set(generationId, {
-            ...generation,
-            toastId,
-          });
-        }
-        return newMap;
-      });
-    } catch (error) {
-      console.error("Error starting video extension:", error);
-      toast({
-        title: "Extension failed",
-        description:
-          error instanceof Error
-            ? error.message
-            : "Failed to start video extension",
-        variant: "destructive",
-      });
-      setIsExtendingVideo(false);
-    }
-  };
-
-  // Function to handle video generation completion
-  const handleVideoGenerationComplete = async (
-    videoId: string,
-    videoUrl: string,
-    duration: number,
-  ) => {
-    try {
-      console.log("Video generation complete:", {
-        videoId,
-        videoUrl,
-        duration,
-      });
-
-      // Get the generation data to check for source image ID
-      const generation = activeVideoGenerations.get(videoId);
-      const sourceImageId = generation?.sourceImageId || selectedImageForVideo;
-      const isBackgroundRemoval =
-        generation?.modelId === "bria-video-background-removal";
-
-      // Dismiss progress toast if it exists
-      if (generation?.toastId) {
-        const toastElement = document.querySelector(
-          `[data-toast-id="${generation.toastId}"]`,
-        );
-        if (toastElement) {
-          // Trigger dismiss by clicking the close button
-          const closeButton = toastElement.querySelector(
-            "[data-radix-toast-close]",
-          );
-          if (closeButton instanceof HTMLElement) {
-            closeButton.click();
-          }
-        }
-      }
-
-      // Find the original image if this was an image-to-video conversion
-      if (sourceImageId) {
-        const image = images.find((img) => img.id === sourceImageId);
-        if (image) {
-          // Create a video element based on the original image
-          const video = convertImageToVideo(
-            image,
-            videoUrl,
-            duration,
-            false, // Don't replace the original image
-          );
-
-          // Position the video to the right of the source image
-          // Add a small gap between the image and video (20px)
-          video.x = image.x + image.width + 20;
-          video.y = image.y; // Keep the same vertical position
-
-          // Add the video to the videos state
-          setVideos((prev) => [...prev, { ...video, isVideo: true as const }]);
-
-          // Save to history
-          saveToHistory();
-
-          // Show success toast
-          toast({
-            title: "Video created successfully",
-            description:
-              "The video has been added to the right of the source image.",
-          });
-        } else {
-          console.error("Source image not found:", sourceImageId);
-          toast({
-            title: "Error creating video",
-            description: "The source image could not be found.",
-            variant: "destructive",
-          });
-        }
-      } else if (generation?.sourceVideoId || generation?.isVideoToVideo) {
-        // This was a video-to-video transformation or extension
-        const sourceVideoId =
-          generation?.sourceVideoId ||
-          selectedVideoForVideo ||
-          selectedVideoForExtend;
-        const isExtension = generation?.isVideoExtension;
-
-        if (sourceVideoId) {
-          const sourceVideo = videos.find((vid) => vid.id === sourceVideoId);
-          if (sourceVideo) {
-            // Create a new video based on the source video
-            const newVideo: PlacedVideo = {
-              id: `video_${Date.now()}_${Math.random().toString(36).substring(7)}`,
-              src: videoUrl,
-              x: sourceVideo.x + sourceVideo.width + 20, // Position to the right
-              y: sourceVideo.y,
-              width: sourceVideo.width,
-              height: sourceVideo.height,
-              rotation: 0,
-              isPlaying: false,
-              currentTime: 0,
-              duration: duration,
-              volume: 1,
-              muted: false,
-              isLooping: false,
-              isVideo: true as const,
-            };
-
-            // Add the transformed video to the canvas
-            setVideos((prev) => [...prev, newVideo]);
-
-            // Save to history
-            saveToHistory();
-
-            if (isExtension) {
-              toast({
-                title: "Video extended successfully",
-                description:
-                  "The extended video has been added to the right of the source video.",
-              });
-            } else if (
-              generation?.modelId === "bria-video-background-removal"
-            ) {
-              toast({
-                title: "Background removed successfully",
-                description:
-                  "The video with removed background has been added to the right of the source video.",
-              });
-            } else {
-              toast({
-                title: "Video transformed successfully",
-                description:
-                  "The transformed video has been added to the right of the source video.",
-              });
-            }
-          } else {
-            console.error("Source video not found:", sourceVideoId);
-            toast({
-              title: "Error creating video",
-              description: "The source video could not be found.",
-              variant: "destructive",
-            });
-          }
-        }
-
-        // Reset the transformation/extension state
-        setIsTransformingVideo(false);
-        setSelectedVideoForVideo(null);
-        setIsExtendingVideo(false);
-        setSelectedVideoForExtend(null);
-      } else {
-        // This was a text-to-video generation
-        // For now, just log it as the placement function is missing
-        console.log("Generated video URL:", videoUrl);
-        toast({
-          title: "Video generated",
-          description: "Video is ready but cannot be placed on canvas yet.",
-        });
-      }
-
-      // Remove from active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(videoId);
-        return newMap;
-      });
-
-      // Reset appropriate flags based on generation type
-      if (isBackgroundRemoval) {
-        setIsRemovingVideoBackground(false);
-      } else {
-        setIsConvertingToVideo(false);
-        setSelectedImageForVideo(null);
-      }
-    } catch (error) {
-      console.error("Error completing video generation:", error);
-
-      toast({
-        title: "Error creating video",
-        description:
-          error instanceof Error ? error.message : "Failed to create video",
-        variant: "destructive",
-      });
-
-      // Remove from active generations even on error
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(videoId);
-        return newMap;
-      });
-
-      setIsConvertingToVideo(false);
-      setSelectedImageForVideo(null);
-    }
-  };
-
-  // Function to handle video generation errors
-  const handleVideoGenerationError = (videoId: string, error: string) => {
-    console.error("Video generation error:", error);
-
-    // Check if this was a background removal
-    const generation = activeVideoGenerations.get(videoId);
-    const isBackgroundRemoval =
-      generation?.modelId === "bria-video-background-removal";
-
-    toast({
-      title: isBackgroundRemoval
-        ? "Background removal failed"
-        : "Video generation failed",
-      description: error,
-      variant: "destructive",
-    });
-
-    // Remove from active generations
-    setActiveVideoGenerations((prev) => {
-      const newMap = new Map(prev);
-      newMap.delete(videoId);
-      return newMap;
-    });
-
-    // Reset appropriate flags
-    if (isBackgroundRemoval) {
-      setIsRemovingVideoBackground(false);
-    } else {
-      setIsConvertingToVideo(false);
-      setIsTransformingVideo(false);
-      setIsExtendingVideo(false);
-    }
-  };
-
-  // Function to handle video generation progress
-  const handleVideoGenerationProgress = (
-    videoId: string,
-    progress: number,
-    status: string,
-  ) => {
-    // You could update a progress indicator here if needed
-    console.log(`Video generation progress: ${progress}% - ${status}`);
-  };
-
   // TODO: Migrate isolateObject to REST API
   // const { mutateAsync: isolateObject } = useMutation(...);
-
-  // Save current state to storage
-  const saveToStorage = useCallback(async () => {
-    try {
-      setIsSaving(true);
-
-      // Save canvas state (positions, transforms, etc.)
-      const canvasState: CanvasState = {
-        elements: [
-          ...images.map(imageToCanvasElement),
-          ...videos.map(videoToCanvasElement),
-        ],
-        backgroundColor: "#ffffff",
-        lastModified: Date.now(),
-        viewport: viewport,
-      };
-      canvasStorage.saveCanvasState(canvasState);
-
-      // Save actual image data to IndexedDB
-      for (const image of images) {
-        // Skip if it's a placeholder for generation
-        if (shouldSkipStorage(image.src)) continue;
-
-        // Check if we already have this image stored
-        const existingImage = await canvasStorage.getImage(image.id);
-        if (!existingImage) {
-          await canvasStorage.saveImage(image.src, image.id);
-        }
-      }
-
-      // Save video data to IndexedDB
-      for (const video of videos) {
-        // Skip if it's a placeholder for generation
-        if (shouldSkipStorage(video.src)) continue;
-
-        // Check if we already have this video stored
-        const existingVideo = await canvasStorage.getVideo(video.id);
-        if (!existingVideo) {
-          await canvasStorage.saveVideo(video.src, video.duration, video.id);
-        }
-      }
-
-      // Clean up unused images and videos
-      await canvasStorage.cleanupOldData();
-
-      // Brief delay to show the indicator
-      setTimeout(() => setIsSaving(false), 300);
-    } catch (error) {
-      console.error("Failed to save to storage:", error);
-      setIsSaving(false);
-    }
-  }, [images, videos, viewport]);
 
   const multiImageHandlers = useMultiImageGeneration({
     activeGenerations,
@@ -941,294 +365,6 @@ export default function OverlayPage() {
     viewport,
     canvasSize,
   });
-
-  // Load state from storage
-  const loadFromStorage = useCallback(async () => {
-    try {
-      const canvasState = canvasStorage.getCanvasState();
-      if (!canvasState) {
-        setIsStorageLoaded(true);
-        return;
-      }
-
-      const loadedImages: PlacedImage[] = [];
-      const loadedVideos: PlacedVideo[] = [];
-
-      for (const element of canvasState.elements) {
-        if (element.type === "image" && element.imageId) {
-          const imageData = await canvasStorage.getImage(element.imageId);
-          if (imageData) {
-            loadedImages.push({
-              id: element.id,
-              src: imageData.originalDataUrl,
-              x: element.transform.x,
-              y: element.transform.y,
-              width: element.width || 300,
-              height: element.height || 300,
-              rotation: element.transform.rotation,
-              ...(element.transform.cropBox && {
-                cropX: element.transform.cropBox.x,
-                cropY: element.transform.cropBox.y,
-                cropWidth: element.transform.cropBox.width,
-                cropHeight: element.transform.cropBox.height,
-              }),
-            });
-          }
-        } else if (element.type === "video" && element.videoId) {
-          const videoData = await canvasStorage.getVideo(element.videoId);
-          if (videoData) {
-            loadedVideos.push({
-              id: element.id,
-              src: videoData.originalDataUrl,
-              x: element.transform.x,
-              y: element.transform.y,
-              width: element.width || 300,
-              height: element.height || 300,
-              rotation: element.transform.rotation,
-              isVideo: true,
-              duration: element.duration || videoData.duration,
-              currentTime: element.currentTime || 0,
-              isPlaying: element.isPlaying || false,
-              volume: element.volume || 1,
-              muted: element.muted || false,
-              isLoaded: false, // Initialize as not loaded
-              ...(element.transform.cropBox && {
-                cropX: element.transform.cropBox.x,
-                cropY: element.transform.cropBox.y,
-                cropWidth: element.transform.cropBox.width,
-                cropHeight: element.transform.cropBox.height,
-              }),
-            });
-          }
-        }
-      }
-
-      // Set loaded images and videos
-      if (loadedImages.length > 0) {
-        setImages(loadedImages);
-      }
-
-      if (loadedVideos.length > 0) {
-        setVideos(loadedVideos);
-      }
-
-      // Restore viewport if available
-      if (canvasState.viewport) {
-        setViewport(canvasState.viewport);
-      }
-    } catch (error) {
-      console.error("Failed to load from storage:", error);
-      toast({
-        title: "Failed to restore canvas",
-        description: "Starting with a fresh canvas",
-        variant: "destructive",
-      });
-    } finally {
-      setIsStorageLoaded(true);
-    }
-  }, [toast]);
-
-  // Load grid setting from localStorage on mount
-  useEffect(() => {
-    const savedShowGrid = localStorage.getItem("showGrid");
-    if (savedShowGrid !== null) {
-      setShowGrid(savedShowGrid === "true");
-    }
-  }, []);
-
-  // Load minimap setting from localStorage on mount
-  useEffect(() => {
-    const savedShowMinimap = localStorage.getItem("showMinimap");
-    if (savedShowMinimap !== null) {
-      setShowMinimap(savedShowMinimap === "true");
-    }
-  }, []);
-
-  // Save grid setting to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem("showGrid", showGrid.toString());
-  }, [showGrid]);
-
-  // Save minimap setting to localStorage when it changes
-  useEffect(() => {
-    localStorage.setItem("showMinimap", showMinimap.toString());
-  }, [showMinimap]);
-
-  // Fetch available media models from the current domain
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchModels = async () => {
-      try {
-        setIsModelsLoading(true);
-        setModelsError(null);
-
-        const endpoint = "/api/models";
-
-        const response = await fetch(endpoint, {
-          headers: {
-            Accept: "application/json",
-          },
-          credentials: "include",
-        });
-
-        const contentType = response.headers.get("content-type") ?? "";
-        let data: ModelsResponse | null = null;
-
-        if (contentType.includes("application/json")) {
-          data = (await response.json()) as ModelsResponse;
-        } else {
-          const body = await response.text().catch(() => "");
-          throw new Error(
-            body
-              ? `Unexpected response when loading models: ${body.slice(0, 120)}`
-              : "Unexpected response when loading models.",
-          );
-        }
-
-        if (!response.ok) {
-          const message =
-            (data as any)?.message ||
-            (data as any)?.error ||
-            `Failed to fetch models (${response.status})`;
-          throw new Error(message);
-        }
-
-        if (!data) {
-          throw new Error("Failed to parse models response.");
-        }
-
-        const candidates = Array.isArray(data.models) ? data.models : [];
-
-        const visibleModels = candidates
-          .filter((model): model is MediaModel => Boolean(model?.id))
-          .map((model) => ({
-            ...model,
-            type: (model.type ?? "").toString().toLowerCase(),
-          }))
-          .filter((model) => model.visible && isDisplayableType(model.type));
-
-        if (!isMounted) {
-          return;
-        }
-
-        setMediaModels(visibleModels);
-
-        if (visibleModels.length > 0) {
-          const preferredModel =
-            visibleModels.find((model) => model.featured) || visibleModels[0];
-
-          setGenerationSettings((prev) => {
-            if (prev.styleId && prev.styleId !== "custom") {
-              return prev;
-            }
-
-            return {
-              ...prev,
-              styleId: preferredModel.id,
-            };
-          });
-
-          setPreviousModelId((prev) => prev ?? preferredModel.id);
-        }
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        console.error("Failed to load models", error);
-        setModelsError(
-          error instanceof Error ? error.message : "Failed to load models",
-        );
-      } finally {
-        if (isMounted) {
-          setIsModelsLoading(false);
-        }
-      }
-    };
-
-    void fetchModels();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [setGenerationSettings]);
-
-  const selectedMediaModel = useMemo(() => {
-    if (
-      !generationSettings.styleId ||
-      generationSettings.styleId === "custom"
-    ) {
-      return null;
-    }
-
-    return (
-      mediaModels.find((model) => model.id === generationSettings.styleId) ??
-      null
-    );
-  }, [generationSettings.styleId, mediaModels]);
-
-  const displayMediaModel = useMemo(() => {
-    if (selectedMediaModel) {
-      return selectedMediaModel;
-    }
-
-    return mediaModels[0] ?? null;
-  }, [selectedMediaModel, mediaModels]);
-
-  // Track previous model when changing models (but not when reverting from custom)
-  useEffect(() => {
-    const currentModelId = generationSettings.styleId;
-    if (
-      currentModelId &&
-      currentModelId !== "custom" &&
-      currentModelId !== previousModelId
-    ) {
-      setPreviousModelId(currentModelId);
-    }
-  }, [generationSettings.styleId, previousModelId]);
-
-  // Save state to history
-  const saveToHistory = useCallback(() => {
-    const newState = {
-      images: [...images],
-      videos: [...videos],
-      selectedIds: [...selectedIds],
-    };
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push(newState);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  }, [images, videos, selectedIds, history, historyIndex]);
-
-  // Undo
-  const undo = useCallback(() => {
-    if (historyIndex > 0) {
-      const prevState = history[historyIndex - 1];
-      setImages(prevState.images);
-      setVideos(prevState.videos || []);
-      setSelectedIds(prevState.selectedIds);
-      setHistoryIndex(historyIndex - 1);
-    }
-  }, [history, historyIndex]);
-
-  // Redo
-  const redo = useCallback(() => {
-    if (historyIndex < history.length - 1) {
-      const nextState = history[historyIndex + 1];
-      setImages(nextState.images);
-      setVideos(nextState.videos || []);
-      setSelectedIds(nextState.selectedIds);
-      setHistoryIndex(historyIndex + 1);
-    }
-  }, [history, historyIndex]);
-
-  // Save initial state
-  useEffect(() => {
-    if (history.length === 0) {
-      saveToHistory();
-    }
-  }, []);
 
   // Set canvas ready state after mount
   useEffect(() => {
@@ -1297,76 +433,10 @@ export default function OverlayPage() {
   // Load default images only if no saved state
   useEffect(() => {
     if (!isStorageLoaded) return;
-    if (images.length > 0) return; // Already have images from storage
+    if (images.length > 0) return;
 
-    const loadDefaultImages = async () => {
-      const defaultImagePaths = [
-        "/hat.png",
-        "/man.png",
-        "/og-img-compress.png",
-        "/chad.png",
-        "/anime.png",
-        "/cat.jpg",
-        "/overlay.png",
-      ];
-      const loadedImages: PlacedImage[] = [];
-
-      for (let i = 0; i < defaultImagePaths.length; i++) {
-        const path = defaultImagePaths[i];
-        try {
-          const response = await fetch(path);
-          const blob = await response.blob();
-          const reader = new FileReader();
-
-          reader.onload = (e) => {
-            const img = new window.Image();
-            img.crossOrigin = "anonymous"; // Enable CORS
-            img.onload = () => {
-              const id = `default-${path.replace("/", "").replace(".png", "")}-${Date.now()}`;
-              const aspectRatio = img.width / img.height;
-              const maxSize = 200;
-              let width = maxSize;
-              let height = maxSize / aspectRatio;
-
-              if (height > maxSize) {
-                height = maxSize;
-                width = maxSize * aspectRatio;
-              }
-
-              // Position images in a row at center of viewport
-              const spacing = 250;
-              const totalWidth = spacing * (defaultImagePaths.length - 1);
-              const viewportCenterX = canvasSize.width / 2;
-              const viewportCenterY = canvasSize.height / 2;
-              const startX = viewportCenterX - totalWidth / 2;
-              const x = startX + i * spacing - width / 2;
-              const y = viewportCenterY - height / 2;
-
-              setImages((prev) => [
-                ...prev,
-                {
-                  id,
-                  src: e.target?.result as string,
-                  x,
-                  y,
-                  width,
-                  height,
-                  rotation: 0,
-                },
-              ]);
-            };
-            img.src = e.target?.result as string;
-          };
-
-          reader.readAsDataURL(blob);
-        } catch (error) {
-          console.error(`Failed to load default image ${path}:`, error);
-        }
-      }
-    };
-
-    loadDefaultImages();
-  }, [isStorageLoaded, images.length]);
+    void loadDefaultImages();
+  }, [images.length, isStorageLoaded, loadDefaultImages]);
 
   // Helper function to resize image if too large
   const resizeImageIfNeeded = async (
@@ -1484,90 +554,12 @@ export default function OverlayPage() {
     });
   };
 
-  // Handle file upload
-  const handleFileUpload = (
-    files: FileList | null,
-    position?: { x: number; y: number },
-  ) => {
-    if (!files) return;
-
-    Array.from(files).forEach((file, index) => {
-      if (file.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const id = `img-${Date.now()}-${Math.random()}`;
-          const img = new window.Image();
-          img.crossOrigin = "anonymous"; // Enable CORS
-          img.onload = () => {
-            const aspectRatio = img.width / img.height;
-            const maxSize = 300;
-            let width = maxSize;
-            let height = maxSize / aspectRatio;
-
-            if (height > maxSize) {
-              height = maxSize;
-              width = maxSize * aspectRatio;
-            }
-
-            // Place image at position or center of current viewport
-            let x, y;
-            if (position) {
-              // Convert screen position to canvas coordinates
-              x = (position.x - viewport.x) / viewport.scale - width / 2;
-              y = (position.y - viewport.y) / viewport.scale - height / 2;
-            } else {
-              // Center of viewport
-              const viewportCenterX =
-                (canvasSize.width / 2 - viewport.x) / viewport.scale;
-              const viewportCenterY =
-                (canvasSize.height / 2 - viewport.y) / viewport.scale;
-              x = viewportCenterX - width / 2;
-              y = viewportCenterY - height / 2;
-            }
-
-            // Add offset for multiple files
-            if (index > 0) {
-              x += index * 20;
-              y += index * 20;
-            }
-
-            setImages((prev) => [
-              ...prev,
-              {
-                id,
-                src: e.target?.result as string,
-                x,
-                y,
-                width,
-                height,
-                rotation: 0,
-              },
-            ]);
-          };
-          img.src = e.target?.result as string;
-        };
-        reader.readAsDataURL(file);
-      }
-    });
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-
-    // Get drop position relative to the stage
-    const stage = stageRef.current;
-    if (stage) {
-      const container = stage.container();
-      const rect = container.getBoundingClientRect();
-      const dropPosition = {
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
-      };
-      handleFileUpload(e.dataTransfer.files, dropPosition);
-    } else {
-      handleFileUpload(e.dataTransfer.files);
-    }
-  };
+  const handleDrop = useCallback(
+    (event: React.DragEvent) => {
+      persistDrop(event, stageRef.current);
+    },
+    [persistDrop],
+  );
 
   // Handle wheel for zoom
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -1932,19 +924,7 @@ export default function OverlayPage() {
       return;
     }
 
-    // Prefer explicitly selected model, otherwise fall back to previously selected/display model
-    const resolvedModelId = (() => {
-      if (
-        generationSettings.styleId &&
-        generationSettings.styleId !== "custom"
-      ) {
-        return generationSettings.styleId;
-      }
-      if (generationSettings.styleId === "custom" && previousModelId) {
-        return previousModelId;
-      }
-      return displayMediaModel?.id;
-    })();
+    const resolvedModelId = resolveModelId();
 
     const targetModel =
       mediaModels.find((model) => model.id === resolvedModelId) ||
@@ -2365,126 +1345,6 @@ export default function OverlayPage() {
       description: "Background removal is being migrated to the new API",
       variant: "default",
     });
-  };
-
-  // Function to handle the "Remove Background from Video" option in the context menu
-  const handleRemoveVideoBackground = (videoId: string) => {
-    const video = videos.find((vid) => vid.id === videoId);
-    if (!video) return;
-
-    setSelectedVideoForBackgroundRemoval(videoId);
-    setIsRemoveVideoBackgroundDialogOpen(true);
-  };
-
-  // Function to handle the video background removal
-  const handleVideoBackgroundRemoval = async (backgroundColor: string) => {
-    if (!selectedVideoForBackgroundRemoval) return;
-
-    const video = videos.find(
-      (vid) => vid.id === selectedVideoForBackgroundRemoval,
-    );
-    if (!video) return;
-
-    try {
-      setIsRemovingVideoBackground(true);
-
-      // Close the dialog
-      setIsRemoveVideoBackgroundDialogOpen(false);
-
-      // Don't show a toast here - the StreamingVideo component will handle progress
-
-      // Upload video if it's a data URL or blob URL
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
-      }
-
-      // Create a unique ID for this generation
-      const generationId = `bg_removal_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-      // Map the background color to the API's expected format
-      const colorMap: Record<string, string> = {
-        transparent: "Transparent",
-        black: "Black",
-        white: "White",
-        gray: "Gray",
-        red: "Red",
-        green: "Green",
-        blue: "Blue",
-        yellow: "Yellow",
-        cyan: "Cyan",
-        magenta: "Magenta",
-        orange: "Orange",
-      };
-
-      // Map to API format
-      const apiBackgroundColor = colorMap[backgroundColor] || "Black";
-
-      // Add to active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(generationId, {
-          imageUrl: videoUrl,
-          prompt: `Removing background from video`,
-          duration: video.duration || 5,
-          modelId: "bria-video-background-removal",
-          modelConfig: mediaModels.find(
-            (m) => m.id === "bria-video-background-removal",
-          ),
-          sourceVideoId: video.id,
-          backgroundColor: apiBackgroundColor,
-        });
-        return newMap;
-      });
-
-      // Create a persistent toast that will stay visible until the conversion completes
-      const toastId = toast({
-        title: "Removing background from video",
-        description: "This may take several minutes...",
-        duration: Infinity, // Make the toast stay until manually dismissed
-      }).id;
-
-      // Store the toast ID with the generation for later reference
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generation = newMap.get(generationId);
-        if (generation) {
-          newMap.set(generationId, {
-            ...generation,
-            toastId,
-          });
-        }
-        return newMap;
-      });
-
-      // Remove the direct API call since StreamingVideo will handle it
-      // The StreamingVideo component will handle the actual API call and progress updates
-    } catch (error) {
-      console.error("Error removing video background:", error);
-      toast({
-        title: "Error processing video",
-        description:
-          error instanceof Error ? error.message : "An error occurred",
-        variant: "destructive",
-      });
-
-      // Remove from active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generationId = Array.from(prev.keys()).find(
-          (key) =>
-            prev.get(key)?.sourceVideoId === selectedVideoForBackgroundRemoval,
-        );
-        if (generationId) {
-          newMap.delete(generationId);
-        }
-        return newMap;
-      });
-    } finally {
-      // Don't set isRemovingVideoBackground to false here - let the completion/error handlers do it
-      setSelectedVideoForBackgroundRemoval(null);
-    }
   };
 
   const sendToFront = useCallback(() => {
@@ -3555,7 +2415,7 @@ export default function OverlayPage() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={undo}
-                        disabled={historyIndex <= 0}
+                        disabled={!canUndo}
                         className="rounded-none"
                         title="Undo"
                       >
@@ -3566,7 +2426,7 @@ export default function OverlayPage() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={redo}
-                        disabled={historyIndex >= history.length - 1}
+                        disabled={!canRedo}
                         className="rounded-none"
                         title="Redo"
                       >
@@ -3909,7 +2769,7 @@ export default function OverlayPage() {
                               // Add event handlers
                               input.onchange = (e) => {
                                 try {
-                                  handleFileUpload(
+                                  uploadFilesToCanvas(
                                     (e.target as HTMLInputElement).files,
                                   );
                                 } catch (error) {
@@ -4184,8 +3044,7 @@ export default function OverlayPage() {
       <ImageToVideoDialog
         isOpen={isImageToVideoDialogOpen}
         onClose={() => {
-          setIsImageToVideoDialogOpen(false);
-          setSelectedImageForVideo(null);
+          closeImageToVideoDialog();
         }}
         onConvert={handleImageToVideoConversion}
         imageUrl={
