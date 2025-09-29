@@ -33,7 +33,7 @@ import {
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Logo, SpinnerIcon } from "@/components/icons";
-import { useTRPC } from "@/trpc/client";
+// Removed: import { useTRPC } from "@/trpc/client";
 import { useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -57,17 +57,19 @@ import { useMultiImageGeneration } from "@/hooks/useMultiImageGeneration";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
-import { StreamingImage } from "@/components/canvas/StreamingImage";
-import { StreamingVideo } from "@/components/canvas/StreamingVideo";
+// TODO: Migrate StreamingImage and StreamingVideo to REST API
+// import { StreamingImage } from "@/components/canvas/StreamingImage";
+// import { StreamingVideo } from "@/components/canvas/StreamingVideo";
 import { CropOverlayWrapper } from "@/components/canvas/CropOverlayWrapper";
 import { CanvasImage } from "@/components/canvas/CanvasImage";
 import { CanvasVideo } from "@/components/canvas/CanvasVideo";
 import { VideoControls } from "@/components/canvas/VideoControls";
 import { ImageToVideoDialog } from "@/components/canvas/ImageToVideoDialog";
-import { VideoToVideoDialog } from "@/components/canvas/VideoToVideoDialog";
-import { ExtendVideoDialog } from "@/components/canvas/ExtendVideoDialog";
-import { RemoveVideoBackgroundDialog } from "@/components/canvas/VideoModelComponents";
-import { getVideoModelById } from "@/lib/video-models";
+// TODO: Migrate these dialogs to use dynamic models from backend API
+// import { VideoToVideoDialog } from "@/components/canvas/VideoToVideoDialog";
+// import { ExtendVideoDialog } from "@/components/canvas/ExtendVideoDialog";
+// import { RemoveVideoBackgroundDialog } from "@/components/canvas/VideoModelComponents";
+// Removed: import { getVideoModelById } from "@/lib/video-models";
 
 // Import types
 import type {
@@ -112,6 +114,11 @@ import {
   shouldSkipStorage,
 } from "@/utils/placeholder-utils";
 import { useImageToImage } from "@/hooks/useImageToImage";
+import {
+  resolveModelEndpoint,
+  getImageInputParamName,
+  filterModelParameters,
+} from "@/utils/model-utils";
 import {
   Select,
   SelectContent,
@@ -322,13 +329,10 @@ export default function OverlayPage() {
     previousGenerationCount,
   ]);
 
-  const trpc = useTRPC();
+  // Removed: const trpc = useTRPC();
 
-  // Direct FAL upload function using proxy
-
-  const { mutateAsync: removeBackground } = useMutation(
-    trpc.removeBackground.mutationOptions(),
-  );
+  // TODO: Migrate removeBackground to REST API
+  // const { mutateAsync: removeBackground } = useMutation(...);
 
   // Function to handle the "Convert to Video" option in the context menu
   const handleConvertToVideo = (imageId: string) => {
@@ -351,64 +355,106 @@ export default function OverlayPage() {
     try {
       setIsConvertingToVideo(true);
 
-      // Upload image if it's a data URL
-      let imageUrl = image.src;
-      if (imageUrl.startsWith("data:")) {
-        // TODO: Replace with new backend upload
-        imageUrl = imageUrl; // Keep original for now
+      // Resolve selected model from catalog
+      const modelId =
+        settings.modelId || generationSettings.styleId || undefined;
+      const model = modelId
+        ? mediaModels.find((m) => m.id === modelId)
+        : mediaModels.find((m) => m.type === "video");
+
+      if (!model) {
+        throw new Error("No video model selected.");
       }
 
-      // Create a unique ID for this generation
-      const generationId = `img2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      // Prepare parameters including the selected image URL in the proper field
+      const imageParamName = getImageInputParamName(model) || "image_url";
+      const baseParams: Record<string, any> = { ...settings };
+      delete baseParams.modelId;
+      delete baseParams.sourceUrl;
 
-      // Add to active generations
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        newMap.set(generationId, {
-          imageUrl,
-          prompt: settings.prompt || "",
-          duration: settings.duration || 5,
-          modelId: settings.modelId, // Add video modelId
-          resolution: settings.resolution || "720p",
-          cameraFixed: settings.cameraFixed,
-          seed: settings.seed,
-          sourceImageId: selectedImageForVideo, // Store the source image ID
-        });
-        return newMap;
+      const parameters = {
+        ...baseParams,
+        [imageParamName]: image.src,
+      };
+
+      // Try to resolve endpoint (fallback handled by backend if needed)
+      const endpoint = resolveModelEndpoint(
+        model as unknown as MediaModel,
+        true,
+      );
+
+      // Call our backend generate API directly (no TRPC streaming)
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: model.id,
+          endpoint,
+          parameters,
+        }),
       });
 
-      // Clear the converting flag since it's now tracked in activeVideoGenerations
-      setIsConvertingToVideo(false);
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText || `Image-to-video failed with status ${response.status}`,
+        );
+      }
 
-      // Close the dialog
+      const payload = await response.json();
+      // Support either { job } wrapper or direct job
+      const job = payload.job ?? payload;
+      const status = (job?.status || job?.output?.status || "unknown")
+        .toString()
+        .toLowerCase();
+
+      if (status !== "completed") {
+        throw new Error(`Generation returned status: ${status}`);
+      }
+
+      // Process result assets
+      const { processGenerationResult } = useImageGeneration();
+      const result = processGenerationResult(job);
+      if (!result.success || result.assets.length === 0) {
+        throw new Error(result.error || "Generation completed with no asset.");
+      }
+
+      const assetUrl = result.assets[0].url;
+      const duration =
+        job?.result?.metadata?.duration ||
+        job?.output?.result?.metadata?.duration ||
+        5;
+
+      // Place the video next to the source image
+      const newVideo = convertImageToVideo(image, assetUrl, duration, false);
+      newVideo.x = image.x + image.width + 20;
+      newVideo.y = image.y;
+
+      setVideos((prev) => [...prev, { ...newVideo, isVideo: true as const }]);
+      saveToHistory();
+
+      toast({
+        title: "Video created",
+        description: "Added next to the source image.",
+      });
+
+      // Close dialog
       setIsImageToVideoDialogOpen(false);
-
-      // Get video model name for toast display
-      let modelName = "Video Model";
-      const modelId = settings.modelId || "ltx-video"; // Default to ltx-video
-      const { getVideoModelById } = await import("@/lib/video-models");
-      const model = getVideoModelById(modelId);
-      if (model) {
-        modelName = model.name;
-      }
-
-      // Store the toast ID with the generation for later reference
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generation = newMap.get(generationId);
-        if (generation) {
-          newMap.set(generationId, generation);
-        }
-        return newMap;
-      });
     } catch (error) {
-      console.error("Error starting image-to-video conversion:", error);
+      console.error("Error in image-to-video conversion:", error);
       toast({
         title: "Conversion failed",
         description:
-          error instanceof Error ? error.message : "Failed to start conversion",
+          error instanceof Error
+            ? error.message
+            : "Failed to convert image to video",
         variant: "destructive",
       });
+    } finally {
       setIsConvertingToVideo(false);
     }
   };
@@ -464,11 +510,12 @@ export default function OverlayPage() {
 
       // Get video model name for toast display
       let modelName = "Video Model";
-      const modelId = settings.modelId || "seedance-pro";
-      const { getVideoModelById } = await import("@/lib/video-models");
-      const model = getVideoModelById(modelId);
-      if (model) {
-        modelName = model.name;
+      const modelId = settings.modelId;
+      if (modelId) {
+        const model = mediaModels.find((m) => m.id === modelId);
+        if (model) {
+          modelName = model.name;
+        }
       }
 
       // Create a persistent toast
@@ -554,11 +601,12 @@ export default function OverlayPage() {
 
       // Get video model name for toast display
       let modelName = "Video Model";
-      const modelId = settings.modelId || "seedance-pro";
-      const { getVideoModelById } = await import("@/lib/video-models");
-      const model = getVideoModelById(modelId);
-      if (model) {
-        modelName = model.name;
+      const modelId = settings.modelId;
+      if (modelId) {
+        const model = mediaModels.find((m) => m.id === modelId);
+        if (model) {
+          modelName = model.name;
+        }
       }
 
       // Create a persistent toast
@@ -827,9 +875,8 @@ export default function OverlayPage() {
     console.log(`Video generation progress: ${progress}% - ${status}`);
   };
 
-  const { mutateAsync: isolateObject } = useMutation(
-    trpc.isolateObject.mutationOptions(),
-  );
+  // TODO: Migrate isolateObject to REST API
+  // const { mutateAsync: isolateObject } = useMutation(...);
 
   // Save current state to storage
   const saveToStorage = useCallback(async () => {
@@ -887,6 +934,7 @@ export default function OverlayPage() {
     activeGenerations,
     setActiveGenerations,
     setImages,
+    setVideos,
     setSelectedIds,
     setIsGenerating,
     saveToStorage,
@@ -2089,16 +2137,18 @@ export default function OverlayPage() {
           console.log(`Asset ${i}:`, asset.url),
         );
 
-        const { updatedPlaceholders, newImages } = createCanvasImagesFromAssets(
-          result.assets,
-          placeholderIds,
-          viewport,
-          canvasSize,
-        );
+        const { updatedPlaceholders, newImages, newVideos } =
+          createCanvasImagesFromAssets(
+            result.assets,
+            placeholderIds,
+            viewport,
+            canvasSize,
+          );
 
-        console.log("Canvas images created:", {
+        console.log("Canvas images and videos created:", {
           updatedPlaceholdersCount: updatedPlaceholders.length,
           newImagesCount: newImages.length,
+          newVideosCount: newVideos.length,
         });
 
         if (updatedPlaceholders.length > 0) {
@@ -2147,6 +2197,50 @@ export default function OverlayPage() {
           ];
           if (allGeneratedIds.length > 0) {
             setSelectedIds(allGeneratedIds);
+          }
+        }
+
+        // Add any generated videos to the canvas
+        if (newVideos.length > 0) {
+          console.log("Adding generated videos to canvas:", {
+            videosCount: newVideos.length,
+          });
+
+          // Align videos to placeholder positions/sizes when available
+          const placeholderMap = new Map(
+            images
+              .filter((img) => placeholderIds.includes(img.id))
+              .map((img) => [img.id, img]),
+          );
+
+          const mappedVideos = newVideos.map((vid, index) => {
+            const placeholderId = placeholderIds[index];
+            const ph = placeholderId
+              ? placeholderMap.get(placeholderId)
+              : undefined;
+            if (ph) {
+              return {
+                ...vid,
+                x: ph.x,
+                y: ph.y,
+                width: ph.width,
+                height: ph.height,
+              };
+            }
+            return vid;
+          });
+
+          setVideos((prev) => [...prev, ...mappedVideos]);
+
+          // Remove image placeholders now that we placed videos
+          setImages((prev) =>
+            prev.filter((img) => !placeholderIds.includes(img.id)),
+          );
+
+          // Select all generated videos
+          const videoIds = mappedVideos.map((v) => v.id);
+          if (videoIds.length > 0) {
+            setSelectedIds(videoIds);
           }
         }
 
@@ -2265,13 +2359,11 @@ export default function OverlayPage() {
   };
 
   const handleRemoveBackground = async () => {
-    await handleRemoveBackgroundHandler({
-      images,
-      selectedIds,
-      setImages,
-      toast,
-      saveToHistory,
-      removeBackground,
+    // TODO: Implement removeBackground with REST API
+    toast({
+      title: "Feature temporarily unavailable",
+      description: "Background removal is being migrated to the new API",
+      variant: "default",
     });
   };
 
@@ -2337,7 +2429,9 @@ export default function OverlayPage() {
           prompt: `Removing background from video`,
           duration: video.duration || 5,
           modelId: "bria-video-background-removal",
-          modelConfig: getVideoModelById("bria-video-background-removal"),
+          modelConfig: mediaModels.find(
+            (m) => m.id === "bria-video-background-removal",
+          ),
           sourceVideoId: video.id,
           backgroundColor: apiBackgroundColor,
         });
@@ -2544,141 +2638,12 @@ export default function OverlayPage() {
         reader.readAsDataURL(blob);
       });
 
-      // Upload the processed image
-      // TODO: Replace with new backend upload
-      const uploadResult = { url: dataUrl };
-
-      // Isolate object using EVF-SAM2
-      console.log("Calling isolateObject with:", {
-        imageUrl: uploadResult?.url || "",
-        textInput: isolateInputValue,
+      // TODO: Implement isolateObject with REST API
+      toast({
+        title: "Feature temporarily unavailable",
+        description: "Object isolation is being migrated to the new API",
+        variant: "default",
       });
-
-      const result = await isolateObject({
-        imageUrl: uploadResult?.url || "",
-        textInput: isolateInputValue,
-      });
-
-      console.log("IsolateObject result:", result);
-
-      // Use the segmented image URL directly (backend already applied the mask)
-      if (result.url) {
-        console.log("Original image URL:", image.src);
-        console.log("New isolated image URL:", result.url);
-        console.log("Result object:", JSON.stringify(result, null, 2));
-
-        // AUTO DOWNLOAD FOR DEBUGGING
-        try {
-          const link = document.createElement("a");
-          link.href = result.url;
-          link.download = `isolated-${isolateInputValue}-${Date.now()}.png`;
-          link.target = "_blank"; // Open in new tab to see the image
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          console.log("Auto-downloaded isolated image for debugging");
-        } catch (e) {
-          console.error("Failed to auto-download:", e);
-        }
-
-        // Force load the new image before updating state
-        const testImg = new window.Image();
-        testImg.crossOrigin = "anonymous";
-        testImg.onload = () => {
-          console.log(
-            "New image loaded successfully:",
-            testImg.width,
-            "x",
-            testImg.height,
-          );
-
-          // Create a test canvas to verify the image has transparency
-          const testCanvas = document.createElement("canvas");
-          testCanvas.width = testImg.width;
-          testCanvas.height = testImg.height;
-          const testCtx = testCanvas.getContext("2d");
-          if (testCtx) {
-            // Fill with red background
-            testCtx.fillStyle = "red";
-            testCtx.fillRect(0, 0, testCanvas.width, testCanvas.height);
-            // Draw the image on top
-            testCtx.drawImage(testImg, 0, 0);
-
-            // Get a pixel from what should be transparent area (corner)
-            const pixelData = testCtx.getImageData(0, 0, 1, 1).data;
-            console.log("Corner pixel (should show red if transparent):", {
-              r: pixelData[0],
-              g: pixelData[1],
-              b: pixelData[2],
-              a: pixelData[3],
-            });
-          }
-
-          // Update the image in place with the segmented image
-          saveToHistory();
-
-          // Create a completely new image URL with timestamp
-          const newImageUrl = `${result.url}${result.url.includes("?") ? "&" : "?"}t=${Date.now()}&cache=no`;
-
-          // Get the current image to preserve position
-          const currentImage = images.find((img) => img.id === isolateTarget);
-          if (!currentImage) {
-            console.error("Could not find current image!");
-            return;
-          }
-
-          // Create new image with isolated- prefix ID
-          const newImage: PlacedImage = {
-            ...currentImage,
-            id: `isolated-${Date.now()}-${Math.random()}`,
-            src: newImageUrl,
-            // Remove crop values since we've applied them
-            cropX: undefined,
-            cropY: undefined,
-            cropWidth: undefined,
-            cropHeight: undefined,
-          };
-
-          setImages((prev) => {
-            // Replace old image with new one at same index
-            const newImages = [...prev];
-            const index = newImages.findIndex(
-              (img) => img.id === isolateTarget,
-            );
-            if (index !== -1) {
-              newImages[index] = newImage;
-            }
-            return newImages;
-          });
-
-          // Update selection
-          setSelectedIds([newImage.id]);
-
-          toast({
-            title: "Success",
-            description: `Isolated "${isolateInputValue}" successfully`,
-          });
-        };
-
-        testImg.onerror = (e) => {
-          console.error("Failed to load new image:", e);
-          toast({
-            title: "Failed to load isolated image",
-            description: "The isolated image could not be loaded",
-            variant: "destructive",
-          });
-        };
-
-        testImg.src = result.url;
-      } else {
-        toast({
-          title: "No object found",
-          description: `Could not find "${isolateInputValue}" in the image`,
-          variant: "destructive",
-        });
-      }
-
-      // Reset the isolate input
       setIsolateTarget(null);
       setIsolateInputValue("");
       setIsIsolating(false);
@@ -3025,26 +2990,10 @@ export default function OverlayPage() {
       onDragEnter={(e) => e.preventDefault()}
       onDragLeave={(e) => e.preventDefault()}
     >
-      {/* Render streaming components for active generations */}
-      {Array.from(activeGenerations.entries()).map(([imageId, generation]) => (
-        <StreamingImage
-          key={imageId}
-          imageId={imageId}
-          generation={generation}
-          onStatus={multiImageHandlers.onStatus}
-          onComplete={multiImageHandlers.onComplete}
-          onError={(id, error) => {
-            console.error(`Generation error for ${id}:`, error);
-            multiImageHandlers.onError(id, error);
-            setImages((prev) => prev.filter((img) => img.id !== id));
-            toast({
-              title: "Generation failed",
-              description: error.toString(),
-              variant: "destructive",
-            });
-          }}
-        />
-      ))}
+      {/* TODO: Migrate image streaming to REST API */}
+      {/* {Array.from(activeGenerations.entries()).map(([imageId, generation]) => (
+        <StreamingImage ... />
+      ))} */}
 
       {/* Main content */}
       <main className="flex-1 relative flex items-center justify-center w-full">
@@ -3090,366 +3039,383 @@ export default function OverlayPage() {
                 }}
               >
                 {isCanvasReady && (
-                  <Stage
-                    ref={stageRef}
-                    width={canvasSize.width}
-                    height={canvasSize.height}
-                    x={viewport.x}
-                    y={viewport.y}
-                    scaleX={viewport.scale}
-                    scaleY={viewport.scale}
-                    draggable={false}
-                    onDragStart={(e) => {
-                      e.evt?.preventDefault();
-                    }}
-                    onDragEnd={(e) => {
-                      e.evt?.preventDefault();
-                    }}
-                    onMouseDown={handleMouseDown}
-                    onMouseMove={handleMouseMove}
-                    onMouseUp={handleMouseUp}
-                    onMouseLeave={() => {
-                      // Stop panning if mouse leaves the stage
-                      if (isPanningCanvas) {
-                        setIsPanningCanvas(false);
-                      }
-                    }}
-                    onTouchStart={handleTouchStart}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    onContextMenu={(e) => {
-                      // Check if this is a forwarded event from a video overlay
-                      const videoId =
-                        (e.evt as any)?.videoId || (e as any)?.videoId;
-                      if (videoId) {
-                        // This is a right-click on a video
-                        if (!selectedIds.includes(videoId)) {
-                          setSelectedIds([videoId]);
+                  <>
+                    <Stage
+                      ref={stageRef}
+                      width={canvasSize.width}
+                      height={canvasSize.height}
+                      x={viewport.x}
+                      y={viewport.y}
+                      scaleX={viewport.scale}
+                      scaleY={viewport.scale}
+                      draggable={false}
+                      onDragStart={(e) => {
+                        e.evt?.preventDefault();
+                      }}
+                      onDragEnd={(e) => {
+                        e.evt?.preventDefault();
+                      }}
+                      onMouseDown={handleMouseDown}
+                      onMouseMove={handleMouseMove}
+                      onMouseUp={handleMouseUp}
+                      onMouseLeave={() => {
+                        // Stop panning if mouse leaves the stage
+                        if (isPanningCanvas) {
+                          setIsPanningCanvas(false);
                         }
-                        return;
-                      }
-
-                      // Get clicked position
-                      const stage = e.target.getStage();
-                      if (!stage) return;
-
-                      const point = stage.getPointerPosition();
-                      if (!point) return;
-
-                      // Convert to canvas coordinates
-                      const canvasPoint = {
-                        x: (point.x - viewport.x) / viewport.scale,
-                        y: (point.y - viewport.y) / viewport.scale,
-                      };
-
-                      // Check if we clicked on a video first (check in reverse order for top-most)
-                      const clickedVideo = [...videos].reverse().find((vid) => {
-                        return (
-                          canvasPoint.x >= vid.x &&
-                          canvasPoint.x <= vid.x + vid.width &&
-                          canvasPoint.y >= vid.y &&
-                          canvasPoint.y <= vid.y + vid.height
-                        );
-                      });
-
-                      if (clickedVideo) {
-                        if (!selectedIds.includes(clickedVideo.id)) {
-                          setSelectedIds([clickedVideo.id]);
+                      }}
+                      onTouchStart={handleTouchStart}
+                      onTouchMove={handleTouchMove}
+                      onTouchEnd={handleTouchEnd}
+                      onContextMenu={(e) => {
+                        // Check if this is a forwarded event from a video overlay
+                        const videoId =
+                          (e.evt as any)?.videoId || (e as any)?.videoId;
+                        if (videoId) {
+                          // This is a right-click on a video
+                          if (!selectedIds.includes(videoId)) {
+                            setSelectedIds([videoId]);
+                          }
+                          return;
                         }
-                        return;
-                      }
 
-                      // Check if we clicked on an image (check in reverse order for top-most image)
-                      const clickedImage = [...images].reverse().find((img) => {
-                        // Simple bounding box check
-                        // TODO: Could be improved to handle rotation
-                        return (
-                          canvasPoint.x >= img.x &&
-                          canvasPoint.x <= img.x + img.width &&
-                          canvasPoint.y >= img.y &&
-                          canvasPoint.y <= img.y + img.height
-                        );
-                      });
+                        // Get clicked position
+                        const stage = e.target.getStage();
+                        if (!stage) return;
 
-                      if (clickedImage) {
-                        if (!selectedIds.includes(clickedImage.id)) {
-                          // If clicking on unselected image, select only that image
-                          setSelectedIds([clickedImage.id]);
+                        const point = stage.getPointerPosition();
+                        if (!point) return;
+
+                        // Convert to canvas coordinates
+                        const canvasPoint = {
+                          x: (point.x - viewport.x) / viewport.scale,
+                          y: (point.y - viewport.y) / viewport.scale,
+                        };
+
+                        // Check if we clicked on a video first (check in reverse order for top-most)
+                        const clickedVideo = [...videos]
+                          .reverse()
+                          .find((vid) => {
+                            return (
+                              canvasPoint.x >= vid.x &&
+                              canvasPoint.x <= vid.x + vid.width &&
+                              canvasPoint.y >= vid.y &&
+                              canvasPoint.y <= vid.y + vid.height
+                            );
+                          });
+
+                        if (clickedVideo) {
+                          if (!selectedIds.includes(clickedVideo.id)) {
+                            setSelectedIds([clickedVideo.id]);
+                          }
+                          return;
                         }
-                        // If already selected, keep current selection for multi-select context menu
-                      }
-                    }}
-                    onWheel={handleWheel}
-                  >
-                    <Layer>
-                      {/* Grid background */}
-                      {showGrid && (
-                        <CanvasGrid
-                          viewport={viewport}
-                          canvasSize={canvasSize}
-                        />
-                      )}
 
-                      {/* Selection box */}
-                      <SelectionBoxComponent selectionBox={selectionBox} />
+                        // Check if we clicked on an image (check in reverse order for top-most image)
+                        const clickedImage = [...images]
+                          .reverse()
+                          .find((img) => {
+                            // Simple bounding box check
+                            // TODO: Could be improved to handle rotation
+                            return (
+                              canvasPoint.x >= img.x &&
+                              canvasPoint.x <= img.x + img.width &&
+                              canvasPoint.y >= img.y &&
+                              canvasPoint.y <= img.y + img.height
+                            );
+                          });
 
-                      {/* Render images */}
-                      {images
-                        .filter((image) => {
-                          // Performance optimization: only render visible images
-                          const buffer = 100; // pixels buffer
-                          const viewBounds = {
-                            left: -viewport.x / viewport.scale - buffer,
-                            top: -viewport.y / viewport.scale - buffer,
-                            right:
-                              (canvasSize.width - viewport.x) / viewport.scale +
-                              buffer,
-                            bottom:
-                              (canvasSize.height - viewport.y) /
-                                viewport.scale +
-                              buffer,
-                          };
-
-                          return !(
-                            image.x + image.width < viewBounds.left ||
-                            image.x > viewBounds.right ||
-                            image.y + image.height < viewBounds.top ||
-                            image.y > viewBounds.bottom
-                          );
-                        })
-                        .map((image) => (
-                          <CanvasImage
-                            key={image.id}
-                            image={image}
-                            isSelected={selectedIds.includes(image.id)}
-                            onSelect={(e) => handleSelect(image.id, e)}
-                            onChange={(newAttrs) => {
-                              setImages((prev) =>
-                                prev.map((img) =>
-                                  img.id === image.id
-                                    ? { ...img, ...newAttrs }
-                                    : img,
-                                ),
-                              );
-                            }}
-                            onDoubleClick={() => {
-                              setCroppingImageId(image.id);
-                            }}
-                            onDragStart={() => {
-                              // If dragging a selected item in a multi-selection, keep the selection
-                              // If dragging an unselected item, select only that item
-                              let currentSelectedIds = selectedIds;
-                              if (!selectedIds.includes(image.id)) {
-                                currentSelectedIds = [image.id];
-                                setSelectedIds(currentSelectedIds);
-                              }
-
-                              setIsDraggingImage(true);
-                              // Save positions of all selected items
-                              const positions = new Map<
-                                string,
-                                { x: number; y: number }
-                              >();
-                              currentSelectedIds.forEach((id) => {
-                                const img = images.find((i) => i.id === id);
-                                if (img) {
-                                  positions.set(id, { x: img.x, y: img.y });
-                                }
-                              });
-                              setDragStartPositions(positions);
-                            }}
-                            onDragEnd={() => {
-                              setIsDraggingImage(false);
-                              saveToHistory();
-                              setDragStartPositions(new Map());
-                            }}
-                            selectedIds={selectedIds}
-                            images={images}
-                            setImages={setImages}
-                            isDraggingImage={isDraggingImage}
-                            isCroppingImage={croppingImageId === image.id}
-                            dragStartPositions={dragStartPositions}
+                        if (clickedImage) {
+                          if (!selectedIds.includes(clickedImage.id)) {
+                            // If clicking on unselected image, select only that image
+                            setSelectedIds([clickedImage.id]);
+                          }
+                          // If already selected, keep current selection for multi-select context menu
+                        }
+                      }}
+                      onWheel={handleWheel}
+                    >
+                      <Layer>
+                        {/* Grid background */}
+                        {showGrid && (
+                          <CanvasGrid
+                            viewport={viewport}
+                            canvasSize={canvasSize}
                           />
-                        ))}
+                        )}
 
-                      {/* Render videos */}
-                      {videos
-                        .filter((video) => {
-                          // Performance optimization: only render visible videos
-                          const buffer = 100; // pixels buffer
-                          const viewBounds = {
-                            left: -viewport.x / viewport.scale - buffer,
-                            top: -viewport.y / viewport.scale - buffer,
-                            right:
-                              (canvasSize.width - viewport.x) / viewport.scale +
-                              buffer,
-                            bottom:
-                              (canvasSize.height - viewport.y) /
-                                viewport.scale +
-                              buffer,
-                          };
+                        {/* Selection box */}
+                        <SelectionBoxComponent selectionBox={selectionBox} />
 
-                          return !(
-                            video.x + video.width < viewBounds.left ||
-                            video.x > viewBounds.right ||
-                            video.y + video.height < viewBounds.top ||
-                            video.y > viewBounds.bottom
-                          );
-                        })
-                        .map((video) => (
-                          <CanvasVideo
-                            key={video.id}
-                            video={video}
-                            isSelected={selectedIds.includes(video.id)}
-                            onSelect={(e) => handleSelect(video.id, e)}
-                            onChange={(newAttrs) => {
-                              setVideos((prev) =>
-                                prev.map((vid) =>
-                                  vid.id === video.id
-                                    ? { ...vid, ...newAttrs }
-                                    : vid,
-                                ),
-                              );
-                            }}
-                            onDragStart={() => {
-                              // If dragging a selected item in a multi-selection, keep the selection
-                              // If dragging an unselected item, select only that item
-                              let currentSelectedIds = selectedIds;
-                              if (!selectedIds.includes(video.id)) {
-                                currentSelectedIds = [video.id];
-                                setSelectedIds(currentSelectedIds);
-                              }
+                        {/* Render images */}
+                        {images
+                          .filter((image) => {
+                            // Performance optimization: only render visible images
+                            const buffer = 100; // pixels buffer
+                            const viewBounds = {
+                              left: -viewport.x / viewport.scale - buffer,
+                              top: -viewport.y / viewport.scale - buffer,
+                              right:
+                                (canvasSize.width - viewport.x) /
+                                  viewport.scale +
+                                buffer,
+                              bottom:
+                                (canvasSize.height - viewport.y) /
+                                  viewport.scale +
+                                buffer,
+                            };
 
-                              setIsDraggingImage(true);
-                              // Hide video controls during drag
-                              setHiddenVideoControlsIds(
-                                (prev) => new Set([...prev, video.id]),
-                              );
-                              // Save positions of all selected items
-                              const positions = new Map<
-                                string,
-                                { x: number; y: number }
-                              >();
-                              currentSelectedIds.forEach((id) => {
-                                const vid = videos.find((v) => v.id === id);
-                                if (vid) {
-                                  positions.set(id, { x: vid.x, y: vid.y });
-                                }
-                              });
-                              setDragStartPositions(positions);
-                            }}
-                            onDragEnd={() => {
-                              setIsDraggingImage(false);
-                              // Show video controls after drag ends
-                              setHiddenVideoControlsIds((prev) => {
-                                const newSet = new Set(prev);
-                                newSet.delete(video.id);
-                                return newSet;
-                              });
-                              saveToHistory();
-                              setDragStartPositions(new Map());
-                            }}
-                            selectedIds={selectedIds}
-                            videos={videos}
-                            setVideos={setVideos}
-                            isDraggingVideo={isDraggingImage}
-                            isCroppingVideo={false}
-                            dragStartPositions={dragStartPositions}
-                            onResizeStart={() =>
-                              setHiddenVideoControlsIds(
-                                (prev) => new Set([...prev, video.id]),
-                              )
-                            }
-                            onResizeEnd={() =>
-                              setHiddenVideoControlsIds((prev) => {
-                                const newSet = new Set(prev);
-                                newSet.delete(video.id);
-                                return newSet;
-                              })
-                            }
-                          />
-                        ))}
-
-                      {/* Crop overlay */}
-                      {croppingImageId &&
-                        (() => {
-                          const croppingImage = images.find(
-                            (img) => img.id === croppingImageId,
-                          );
-                          if (!croppingImage) return null;
-
-                          return (
-                            <CropOverlayWrapper
-                              image={croppingImage}
-                              viewportScale={viewport.scale}
-                              onCropChange={(crop) => {
+                            return !(
+                              image.x + image.width < viewBounds.left ||
+                              image.x > viewBounds.right ||
+                              image.y + image.height < viewBounds.top ||
+                              image.y > viewBounds.bottom
+                            );
+                          })
+                          .map((image) => (
+                            <CanvasImage
+                              key={image.id}
+                              image={image}
+                              isSelected={selectedIds.includes(image.id)}
+                              onSelect={(e) => handleSelect(image.id, e)}
+                              onChange={(newAttrs) => {
                                 setImages((prev) =>
                                   prev.map((img) =>
-                                    img.id === croppingImageId
-                                      ? { ...img, ...crop }
+                                    img.id === image.id
+                                      ? { ...img, ...newAttrs }
                                       : img,
                                   ),
                                 );
                               }}
-                              onCropEnd={async () => {
-                                // Apply crop to image dimensions
-                                if (croppingImage) {
-                                  const cropWidth =
-                                    croppingImage.cropWidth || 1;
-                                  const cropHeight =
-                                    croppingImage.cropHeight || 1;
-                                  const cropX = croppingImage.cropX || 0;
-                                  const cropY = croppingImage.cropY || 0;
-
-                                  try {
-                                    // Create the cropped image at full resolution
-                                    const croppedImageSrc =
-                                      await createCroppedImage(
-                                        croppingImage.src,
-                                        cropX,
-                                        cropY,
-                                        cropWidth,
-                                        cropHeight,
-                                      );
-
-                                    setImages((prev) =>
-                                      prev.map((img) =>
-                                        img.id === croppingImageId
-                                          ? {
-                                              ...img,
-                                              // Replace with cropped image
-                                              src: croppedImageSrc,
-                                              // Update position to the crop area's top-left
-                                              x: img.x + cropX * img.width,
-                                              y: img.y + cropY * img.height,
-                                              // Update dimensions to match crop size
-                                              width: cropWidth * img.width,
-                                              height: cropHeight * img.height,
-                                              // Remove crop values completely
-                                              cropX: undefined,
-                                              cropY: undefined,
-                                              cropWidth: undefined,
-                                              cropHeight: undefined,
-                                            }
-                                          : img,
-                                      ),
-                                    );
-                                  } catch (error) {
-                                    console.error(
-                                      "Failed to create cropped image:",
-                                      error,
-                                    );
-                                  }
+                              onDoubleClick={() => {
+                                setCroppingImageId(image.id);
+                              }}
+                              onDragStart={() => {
+                                // If dragging a selected item in a multi-selection, keep the selection
+                                // If dragging an unselected item, select only that item
+                                let currentSelectedIds = selectedIds;
+                                if (!selectedIds.includes(image.id)) {
+                                  currentSelectedIds = [image.id];
+                                  setSelectedIds(currentSelectedIds);
                                 }
 
-                                setCroppingImageId(null);
-                                saveToHistory();
+                                setIsDraggingImage(true);
+                                // Save positions of all selected items
+                                const positions = new Map<
+                                  string,
+                                  { x: number; y: number }
+                                >();
+                                currentSelectedIds.forEach((id) => {
+                                  const img = images.find((i) => i.id === id);
+                                  if (img) {
+                                    positions.set(id, { x: img.x, y: img.y });
+                                  }
+                                });
+                                setDragStartPositions(positions);
                               }}
+                              onDragEnd={() => {
+                                setIsDraggingImage(false);
+                                saveToHistory();
+                                setDragStartPositions(new Map());
+                              }}
+                              selectedIds={selectedIds}
+                              images={images}
+                              setImages={setImages}
+                              isDraggingImage={isDraggingImage}
+                              isCroppingImage={croppingImageId === image.id}
+                              dragStartPositions={dragStartPositions}
                             />
-                          );
-                        })()}
-                    </Layer>
-                  </Stage>
+                          ))}
+
+                        {/* Render videos */}
+                        {videos
+                          .filter((video) => {
+                            // Performance optimization: only render visible videos
+                            const buffer = 100; // pixels buffer
+                            const viewBounds = {
+                              left: -viewport.x / viewport.scale - buffer,
+                              top: -viewport.y / viewport.scale - buffer,
+                              right:
+                                (canvasSize.width - viewport.x) /
+                                  viewport.scale +
+                                buffer,
+                              bottom:
+                                (canvasSize.height - viewport.y) /
+                                  viewport.scale +
+                                buffer,
+                            };
+
+                            return !(
+                              video.x + video.width < viewBounds.left ||
+                              video.x > viewBounds.right ||
+                              video.y + video.height < viewBounds.top ||
+                              video.y > viewBounds.bottom
+                            );
+                          })
+                          .map((video) => (
+                            <CanvasVideo
+                              key={video.id}
+                              video={video}
+                              isSelected={selectedIds.includes(video.id)}
+                              onSelect={(e) => handleSelect(video.id, e)}
+                              onChange={(newAttrs) => {
+                                setVideos((prev) =>
+                                  prev.map((vid) =>
+                                    vid.id === video.id
+                                      ? { ...vid, ...newAttrs }
+                                      : vid,
+                                  ),
+                                );
+                              }}
+                              onDragStart={() => {
+                                // If dragging a selected item in a multi-selection, keep the selection
+                                // If dragging an unselected item, select only that item
+                                let currentSelectedIds = selectedIds;
+                                if (!selectedIds.includes(video.id)) {
+                                  currentSelectedIds = [video.id];
+                                  setSelectedIds(currentSelectedIds);
+                                }
+
+                                setIsDraggingImage(true);
+                                // Hide video controls during drag
+                                setHiddenVideoControlsIds(
+                                  (prev) => new Set([...prev, video.id]),
+                                );
+                                // Save positions of all selected items
+                                const positions = new Map<
+                                  string,
+                                  { x: number; y: number }
+                                >();
+                                currentSelectedIds.forEach((id) => {
+                                  const vid = videos.find((v) => v.id === id);
+                                  if (vid) {
+                                    positions.set(id, { x: vid.x, y: vid.y });
+                                  }
+                                });
+                                setDragStartPositions(positions);
+                              }}
+                              onDragEnd={() => {
+                                setIsDraggingImage(false);
+                                // Show video controls after drag ends
+                                setHiddenVideoControlsIds((prev) => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(video.id);
+                                  return newSet;
+                                });
+                                saveToHistory();
+                                setDragStartPositions(new Map());
+                              }}
+                              selectedIds={selectedIds}
+                              videos={videos}
+                              setVideos={setVideos}
+                              isDraggingVideo={isDraggingImage}
+                              isCroppingVideo={false}
+                              dragStartPositions={dragStartPositions}
+                              onResizeStart={() =>
+                                setHiddenVideoControlsIds(
+                                  (prev) => new Set([...prev, video.id]),
+                                )
+                              }
+                              onResizeEnd={() =>
+                                setHiddenVideoControlsIds((prev) => {
+                                  const newSet = new Set(prev);
+                                  newSet.delete(video.id);
+                                  return newSet;
+                                })
+                              }
+                            />
+                          ))}
+
+                        {/* Crop overlay */}
+                        {croppingImageId &&
+                          (() => {
+                            const croppingImage = images.find(
+                              (img) => img.id === croppingImageId,
+                            );
+                            if (!croppingImage) return null;
+
+                            return (
+                              <CropOverlayWrapper
+                                image={croppingImage}
+                                viewportScale={viewport.scale}
+                                onCropChange={(crop) => {
+                                  setImages((prev) =>
+                                    prev.map((img) =>
+                                      img.id === croppingImageId
+                                        ? { ...img, ...crop }
+                                        : img,
+                                    ),
+                                  );
+                                }}
+                                onCropEnd={async () => {
+                                  // Apply crop to image dimensions
+                                  if (croppingImage) {
+                                    const cropWidth =
+                                      croppingImage.cropWidth || 1;
+                                    const cropHeight =
+                                      croppingImage.cropHeight || 1;
+                                    const cropX = croppingImage.cropX || 0;
+                                    const cropY = croppingImage.cropY || 0;
+
+                                    try {
+                                      // Create the cropped image at full resolution
+                                      const croppedImageSrc =
+                                        await createCroppedImage(
+                                          croppingImage.src,
+                                          cropX,
+                                          cropY,
+                                          cropWidth,
+                                          cropHeight,
+                                        );
+
+                                      setImages((prev) =>
+                                        prev.map((img) =>
+                                          img.id === croppingImageId
+                                            ? {
+                                                ...img,
+                                                // Replace with cropped image
+                                                src: croppedImageSrc,
+                                                // Update position to the crop area's top-left
+                                                x: img.x + cropX * img.width,
+                                                y: img.y + cropY * img.height,
+                                                // Update dimensions to match crop size
+                                                width: cropWidth * img.width,
+                                                height: cropHeight * img.height,
+                                                // Remove crop values completely
+                                                cropX: undefined,
+                                                cropY: undefined,
+                                                cropWidth: undefined,
+                                                cropHeight: undefined,
+                                              }
+                                            : img,
+                                        ),
+                                      );
+                                    } catch (error) {
+                                      console.error(
+                                        "Failed to create cropped image:",
+                                        error,
+                                      );
+                                    }
+                                  }
+
+                                  setCroppingImageId(null);
+                                  saveToHistory();
+                                }}
+                              />
+                            );
+                          })()}
+                      </Layer>
+                    </Stage>
+
+                    {/* Video Controls Overlays (absolute to canvas container) */}
+                    <VideoOverlays
+                      videos={videos}
+                      selectedIds={selectedIds}
+                      viewport={viewport}
+                      hiddenVideoControlsIds={hiddenVideoControlsIds}
+                      setVideos={setVideos}
+                    />
+                  </>
                 )}
               </div>
             </ContextMenuTrigger>
@@ -4228,80 +4194,20 @@ export default function OverlayPage() {
             : ""
         }
         isConverting={isConvertingToVideo}
+        mediaModels={mediaModels}
       />
 
-      <VideoToVideoDialog
-        isOpen={isVideoToVideoDialogOpen}
-        onClose={() => {
-          setIsVideoToVideoDialogOpen(false);
-          setSelectedVideoForVideo(null);
-        }}
-        onConvert={handleVideoToVideoTransformation}
-        videoUrl={
-          selectedVideoForVideo
-            ? videos.find((vid) => vid.id === selectedVideoForVideo)?.src || ""
-            : ""
-        }
-        isConverting={isTransformingVideo}
-      />
+      {/* TODO: Migrate these video dialogs to use dynamic models from backend API */}
+      {/* <VideoToVideoDialog ... /> */}
+      {/* <ExtendVideoDialog ... /> */}
+      {/* <RemoveVideoBackgroundDialog ... /> */}
 
-      <ExtendVideoDialog
-        isOpen={isExtendVideoDialogOpen}
-        onClose={() => {
-          setIsExtendVideoDialogOpen(false);
-          setSelectedVideoForExtend(null);
-        }}
-        onExtend={handleVideoExtension}
-        videoUrl={
-          selectedVideoForExtend
-            ? videos.find((vid) => vid.id === selectedVideoForExtend)?.src || ""
-            : ""
-        }
-        isExtending={isExtendingVideo}
-      />
+      {/* TODO: Migrate video streaming to REST API */}
+      {/* {Array.from(activeVideoGenerations.entries()).map(([id, generation]) => (
+        <StreamingVideo ... />
+      ))} */}
 
-      <RemoveVideoBackgroundDialog
-        isOpen={isRemoveVideoBackgroundDialogOpen}
-        onClose={() => {
-          setIsRemoveVideoBackgroundDialogOpen(false);
-          setSelectedVideoForBackgroundRemoval(null);
-        }}
-        onProcess={handleVideoBackgroundRemoval}
-        videoUrl={
-          selectedVideoForBackgroundRemoval
-            ? videos.find((vid) => vid.id === selectedVideoForBackgroundRemoval)
-                ?.src || ""
-            : ""
-        }
-        videoDuration={
-          selectedVideoForBackgroundRemoval
-            ? videos.find((vid) => vid.id === selectedVideoForBackgroundRemoval)
-                ?.duration || 0
-            : 0
-        }
-        isProcessing={isRemovingVideoBackground}
-      />
-
-      {/* Video Generation Streaming Components */}
-      {Array.from(activeVideoGenerations.entries()).map(([id, generation]) => (
-        <StreamingVideo
-          key={id}
-          videoId={id}
-          generation={generation}
-          onComplete={handleVideoGenerationComplete}
-          onError={handleVideoGenerationError}
-          onProgress={handleVideoGenerationProgress}
-        />
-      ))}
-
-      {/* Video Controls Overlays */}
-      <VideoOverlays
-        videos={videos}
-        selectedIds={selectedIds}
-        viewport={viewport}
-        hiddenVideoControlsIds={hiddenVideoControlsIds}
-        setVideos={setVideos}
-      />
+      {/* Video Controls Overlays moved inside canvas container for correct positioning */}
       {/* Model Details Dialog */}
       <ModelDetailsDialog
         open={isModelDetailsDialogOpen}

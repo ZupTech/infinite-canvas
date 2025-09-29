@@ -14,18 +14,7 @@ export const metadata: Metadata = {
   },
   description:
     "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles including anime, oil painting, cyberpunk, and more.",
-  keywords: [
-    "AI style transfer",
-    "image transformation",
-    "flux model",
-    "LoRA",
-    "AI art",
-    "AI canvas",
-    "photo styling",
-    "artificial intelligence",
-    "machine learning",
-    "image generation",
-  ],
+  keywords: ["image generation"],
   authors: [{ name: "Unite" }],
   creator: "Unite",
   publisher: "Unite",
@@ -114,11 +103,7 @@ export default function RootLayout({
         <BotIdClient
           protect={[
             {
-              path: "/api/trpc/*",
-              method: "POST",
-            },
-            {
-              path: "/api/fal",
+              path: "/api/generate",
               method: "POST",
             },
           ]}

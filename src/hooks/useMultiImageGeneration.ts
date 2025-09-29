@@ -1,6 +1,10 @@
 import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { createCanvasImagesFromAssets } from "@/utils/imageGeneration";
-import type { ActiveGeneration, PlacedImage } from "@/types/canvas";
+import type {
+  ActiveGeneration,
+  PlacedImage,
+  PlacedVideo,
+} from "@/types/canvas";
 
 interface ViewportInfo {
   x: number;
@@ -27,6 +31,7 @@ interface UseMultiImageGenerationProps {
     ) => Map<string, ActiveGeneration>,
   ) => void;
   setImages: Dispatch<SetStateAction<PlacedImage[]>>;
+  setVideos: Dispatch<SetStateAction<PlacedVideo[]>>;
   setSelectedIds: (ids: string[]) => void;
   setIsGenerating: (generating: boolean) => void;
   saveToStorage: () => void;
@@ -38,6 +43,7 @@ export const useMultiImageGeneration = ({
   activeGenerations,
   setActiveGenerations,
   setImages,
+  setVideos,
   setSelectedIds,
   setIsGenerating,
   saveToStorage,
@@ -81,12 +87,13 @@ export const useMultiImageGeneration = ({
       ) {
         console.log("Processing coordinator completion with multiple assets");
 
-        const { updatedPlaceholders, newImages } = createCanvasImagesFromAssets(
-          payload.assets,
-          payload.placeholderIds,
-          viewport,
-          canvasSize,
-        );
+        const { updatedPlaceholders, newImages, newVideos } =
+          createCanvasImagesFromAssets(
+            payload.assets,
+            payload.placeholderIds,
+            viewport,
+            canvasSize,
+          );
 
         // Update all placeholders at once
         setImages((prev) => {
@@ -104,6 +111,11 @@ export const useMultiImageGeneration = ({
           ];
         });
 
+        // Add any generated videos to the canvas
+        if (newVideos.length > 0) {
+          setVideos((prev) => [...prev, ...newVideos]);
+        }
+
         // Clean up all placeholders from active generations
         setActiveGenerations((prev) => {
           const newMap = new Map(prev);
@@ -116,10 +128,11 @@ export const useMultiImageGeneration = ({
           return newMap;
         });
 
-        // Select all generated images
+        // Select all generated images and videos
         const allGeneratedIds = [
           ...updatedPlaceholders.map((p) => p.id),
           ...newImages.map((img) => img.id),
+          ...newVideos.map((v) => v.id),
         ];
         if (allGeneratedIds.length > 0) {
           setSelectedIds(allGeneratedIds);
@@ -162,6 +175,7 @@ export const useMultiImageGeneration = ({
     },
     [
       setImages,
+      setVideos,
       setActiveGenerations,
       setSelectedIds,
       setIsGenerating,
