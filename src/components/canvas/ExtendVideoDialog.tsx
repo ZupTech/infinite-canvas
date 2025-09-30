@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -22,24 +22,24 @@ import {
 } from "@/lib/video-models";
 import { ChevronRight, X } from "lucide-react";
 
-interface ImageToVideoDialogProps {
+interface ExtendVideoDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConvert: (settings: VideoGenerationSettings) => void;
-  imageUrl: string;
-  isConverting: boolean;
+  onExtend: (settings: VideoGenerationSettings) => void;
+  videoUrl: string;
+  isExtending: boolean;
 }
 
-export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
+export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
   isOpen,
   onClose,
-  onConvert,
-  imageUrl,
-  isConverting,
+  onExtend,
+  videoUrl,
+  isExtending,
 }) => {
-  const defaultModel = getDefaultVideoModel("image-to-video");
+  const defaultModel = getDefaultVideoModel("video-extension");
   const [selectedModelId, setSelectedModelId] = useState(
-    defaultModel?.id || "seedance-pro",
+    defaultModel?.id || "ltx-video-extend",
   );
   const [selectedModel, setSelectedModel] = useState<
     VideoModelConfig | undefined
@@ -48,13 +48,46 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     defaultModel?.defaults || {},
   );
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [lastFrameUrl, setLastFrameUrl] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  // Extract last frame when video URL changes
+  useEffect(() => {
+    if (videoUrl && isOpen) {
+      const video = document.createElement("video");
+      video.src = videoUrl;
+      video.crossOrigin = "anonymous";
+
+      video.addEventListener("loadedmetadata", () => {
+        // Seek to near the end of the video
+        video.currentTime = video.duration - 0.1;
+      });
+
+      video.addEventListener("seeked", () => {
+        // Create canvas and extract frame
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(video, 0, 0);
+          setLastFrameUrl(canvas.toDataURL("image/png"));
+        }
+      });
+    }
+  }, [videoUrl, isOpen]);
 
   // Update model when selection changes
   useEffect(() => {
     const model = getVideoModelById(selectedModelId);
     if (model) {
       setSelectedModel(model);
-      setOptionValues(model.defaults);
+      // Set defaults with a prompt suggesting continuation
+      setOptionValues({
+        ...model.defaults,
+        prompt:
+          "Continue the video naturally, maintaining the same style and motion...",
+      });
     }
   }, [selectedModelId]);
 
@@ -67,32 +100,34 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     if (!selectedModel) return;
 
     // Map the dynamic options to the VideoGenerationSettings format
-    // This maintains backward compatibility with existing code
     const settings: VideoGenerationSettings = {
-      prompt: optionValues.prompt || "",
-      sourceUrl: imageUrl,
+      prompt: optionValues.prompt || "Continue the video...",
+      sourceUrl: videoUrl,
       modelId: selectedModel.id,
-      // Include all option values for new models first
+      // Include all option values
       ...optionValues,
       // Then override with properly typed values
       ...(optionValues.duration && {
         duration: parseInt(optionValues.duration),
       }),
       ...(optionValues.seed !== undefined && { seed: optionValues.seed }),
+      // Indicate this is a video extension
+      isVideoExtension: true,
     };
 
-    onConvert(settings);
+    onExtend(settings);
   };
 
   if (!selectedModel) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[600px] p-5">
+      <DialogContent className="sm:max-w-[600px] p-5 bg-background">
         <DialogHeader>
-          <DialogTitle>Convert Image to Video</DialogTitle>
+          <DialogTitle>Extend Video</DialogTitle>
           <DialogDescription>
-            Transform your static image into a dynamic video using AI.
+            Continue your video by generating additional frames from the last
+            frame.
           </DialogDescription>
         </DialogHeader>
 
@@ -101,9 +136,9 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
           <div className="w-full mb-4">
             <VideoModelSelector
               value={selectedModelId}
+              category="video-extension"
               onChange={setSelectedModelId}
-              category="image-to-video"
-              disabled={isConverting}
+              disabled={isExtending}
             />
           </div>
 
@@ -111,16 +146,30 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
           <ModelPricingDisplay model={selectedModel} className="mb-4" />
 
           <div className="flex gap-4">
-            {/* Left column - Image Preview */}
+            {/* Left column - Video Preview with note */}
             <div className="w-1/3">
-              <div className="border rounded-xl overflow-hidden aspect-square flex items-center justify-center">
-                {imageUrl && (
-                  <img
-                    src={imageUrl}
-                    alt="Source image"
-                    className="w-full h-full object-contain"
-                  />
-                )}
+              <div className="space-y-2">
+                <div className="border border-border rounded-xl overflow-hidden aspect-square flex items-center justify-center bg-muted/30">
+                  {lastFrameUrl ? (
+                    <img
+                      src={lastFrameUrl}
+                      className="max-w-full max-h-full object-contain"
+                      alt="Last frame"
+                    />
+                  ) : videoUrl ? (
+                    <video
+                      ref={videoRef}
+                      src={videoUrl}
+                      className="max-w-full max-h-full object-contain"
+                      controls={false}
+                      muted
+                      playsInline
+                    />
+                  ) : null}
+                </div>
+                <p className="text-xs text-muted-foreground text-center">
+                  The last frame will be used as the starting point
+                </p>
               </div>
             </div>
 
@@ -131,7 +180,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                 model={selectedModel}
                 values={optionValues}
                 onChange={handleOptionChange}
-                disabled={isConverting}
+                disabled={isExtending}
                 optionKeys={[
                   "prompt",
                   "resolution",
@@ -145,9 +194,9 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
               {selectedModel &&
                 Object.keys(selectedModel.options).length > 5 && (
                   <Button
-                    variant="ghost"
+                    type="button"
                     onClick={() => setShowMoreOptions(true)}
-                    className="px-0 pr-4 flex gap-2 text-sm"
+                    className="w-full flex items-center justify-center gap-2 text-sm"
                   >
                     <ChevronRight className="h-4 w-4" />
                     More Options
@@ -156,35 +205,18 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
             </div>
           </div>
 
-          <DialogFooter className="mt-4 flex justify-between gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={onClose}
-              disabled={isConverting}
-            >
+          <DialogFooter>
+            <Button type="button" onClick={onClose} disabled={isExtending}>
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={isConverting}
-              className="flex items-center gap-2"
-            >
-              {isConverting ? (
+            <Button type="submit" variant="primary" disabled={isExtending}>
+              {isExtending ? (
                 <>
-                  <SpinnerIcon className="h-4 w-4 animate-spin text-white" />
-                  <span className="text-white">Converting...</span>
+                  <SpinnerIcon className="mr-2 h-4 w-4 animate-spin text-white" />
+                  <span className="text-white">Extending...</span>
                 </>
               ) : (
-                <div className="flex items-center gap-2">
-                  <span className="text-white">Run</span>
-                  <span className="flex flex-row space-x-0.5">
-                    <kbd className="flex items-center justify-center text-white tracking-tighter rounded-xl border px-1 font-mono bg-white/10 border-white/10 h-6 min-w-6 text-xs">
-                      ↵
-                    </kbd>
-                  </span>
-                </div>
+                <span className="text-white">Extend Video</span>
               )}
             </Button>
           </DialogFooter>
@@ -200,9 +232,9 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
             />
 
             {/* Panel */}
-            <div className="fixed top-0 right-0 h-full w-96 bg-card shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
+            <div className="fixed top-0 right-0 h-full w-96 bg-background shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
               <div className="h-full flex flex-col">
-                <div className="flex items-center justify-between p-3 border-b">
+                <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
                   <h3 className="font-semibold text-lg">Advanced Options</h3>
                   <Button
                     type="button"
@@ -218,7 +250,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                     model={selectedModel}
                     values={optionValues}
                     onChange={handleOptionChange}
-                    disabled={isConverting}
+                    disabled={isExtending}
                     excludeKeys={[
                       "prompt",
                       "resolution",
