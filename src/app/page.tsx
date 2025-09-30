@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Logo, SpinnerIcon } from "@/components/icons";
+import { SpinnerIcon } from "@/components/icons";
 import { useTRPC } from "@/trpc/client";
 import { useMutation } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
@@ -3839,7 +3839,15 @@ export default function OverlayPage() {
                 target="_blank"
                 className="block transition-opacity"
               >
-                <Logo className="h-8 w-16 text-foreground" />
+                <img
+                  src={
+                    theme === "dark"
+                      ? "https://storage.googleapis.com/unite_assets/logos/Unite%20Logo%20Negativo.png"
+                      : "https://cdn.prod.website-files.com/686549176db3fc9e575ae4b7/68654b105d4af13cbebc5bf4_Logo%20Positivo%20Unite.png"
+                  }
+                  alt="Unite logo"
+                  className="h-8 w-auto"
+                />
               </Link>
             </div>
 
