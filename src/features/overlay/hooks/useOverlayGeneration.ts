@@ -18,7 +18,7 @@ interface UseOverlayGenerationOptions {
   viewport: { x: number; y: number; scale: number };
   mediaModels: MediaModel[];
   displayMediaModel: MediaModel | null;
-  resolveModelId: () => string | undefined;
+  resolveModelId: () => string | null | undefined;
   images: PlacedImage[];
   setImages: React.Dispatch<React.SetStateAction<PlacedImage[]>>;
   setVideos: React.Dispatch<React.SetStateAction<PlacedVideo[]>>;
@@ -28,20 +28,16 @@ interface UseOverlayGenerationOptions {
   processGenerationResult: ReturnType<
     typeof useImageGeneration
   >["processGenerationResult"];
-  extractJobAsset: ReturnType<typeof useImageGeneration>["extractJobAsset"];
   saveToStorage: () => Promise<void>;
   activeVideoGenerationsCount: number;
   isRemovingVideoBackground: boolean;
   isIsolating: boolean;
   isExtendingVideo: boolean;
   isTransformingVideo: boolean;
+  generationSettings: GenerationSettings;
 }
 
 interface UseOverlayGenerationResult {
-  generationSettings: GenerationSettings;
-  setGenerationSettings: React.Dispatch<
-    React.SetStateAction<GenerationSettings>
-  >;
   modelParameters: Record<string, any>;
   setModelParameters: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   isGenerating: boolean;
@@ -67,16 +63,14 @@ export function useOverlayGeneration({
   toast,
   imageToImage,
   processGenerationResult,
-  extractJobAsset,
   saveToStorage,
   activeVideoGenerationsCount,
   isRemovingVideoBackground,
   isIsolating,
   isExtendingVideo,
   isTransformingVideo,
+  generationSettings,
 }: UseOverlayGenerationOptions): UseOverlayGenerationResult {
-  const [generationSettings, setGenerationSettings] =
-    useState<GenerationSettings>(() => ({ prompt: "", loraUrl: "" }));
   const [modelParameters, setModelParameters] = useState<Record<string, any>>(
     {},
   );
@@ -282,35 +276,42 @@ export function useOverlayGeneration({
           }
 
           if (data.type === "completed" && data.job?.assets) {
-            const jobAssets = await processGenerationResult(data.job);
-            const newImages = createCanvasImagesFromAssets(jobAssets);
-            const newVideos = jobAssets
-              .map((asset) => extractJobAsset(asset))
-              .filter((asset): asset is PlacedVideo => asset.type === "video");
+            const jobResult = processGenerationResult(data.job);
+            if (!jobResult.success || jobResult.assets.length === 0) {
+              throw new Error(
+                jobResult.error ||
+                  "Generation completed but no assets were returned.",
+              );
+            }
 
-            if (newImages.length > 0) {
+            const { updatedPlaceholders, newImages, newVideos } =
+              createCanvasImagesFromAssets(
+                jobResult.assets,
+                placeholderIds,
+                viewport,
+                canvasSize,
+              );
+
+            if (updatedPlaceholders.length > 0 || newImages.length > 0) {
               setImages((prevImages) => {
-                const placeholderMap = new Map(
-                  prevImages
-                    .filter((img) => placeholderIds.includes(img.id))
-                    .map((img) => [img.id, img]),
+                const replacements = new Map(
+                  updatedPlaceholders.map((img) => [img.id, img]),
                 );
 
-                const updatedPrev = prevImages.map((img) => {
-                  const replacement = placeholderMap.get(img.id);
-                  return replacement || img;
+                const mergedImages = prevImages.map((img) => {
+                  const replacement = replacements.get(img.id);
+                  return replacement ? { ...img, ...replacement } : img;
                 });
 
-                const finalImages = [...updatedPrev, ...newImages];
-                return finalImages;
+                return [...mergedImages, ...newImages];
               });
 
-              const allGeneratedIds = [
-                ...placeholderIds,
+              const generatedIds = [
+                ...updatedPlaceholders.map((img) => img.id),
                 ...newImages.map((img) => img.id),
               ];
-              if (allGeneratedIds.length > 0) {
-                setSelectedIds(allGeneratedIds);
+              if (generatedIds.length > 0) {
+                setSelectedIds(generatedIds);
               }
             }
 
@@ -435,7 +436,6 @@ export function useOverlayGeneration({
     canvasSize.height,
     canvasSize.width,
     displayMediaModel,
-    extractJobAsset,
     generationSettings.loraUrl,
     generationSettings.prompt,
     generationSettings.styleId,
@@ -456,8 +456,6 @@ export function useOverlayGeneration({
   ]);
 
   return {
-    generationSettings,
-    setGenerationSettings,
     modelParameters,
     setModelParameters,
     isGenerating,

@@ -64,7 +64,12 @@ import { ImageToVideoDialog } from "@/components/canvas/ImageToVideoDialog";
 // Removed: import { getVideoModelById } from "@/lib/video-models";
 
 // Import types
-import type { PlacedImage, PlacedVideo, SelectionBox } from "@/types/canvas";
+import type {
+  GenerationSettings,
+  PlacedImage,
+  PlacedVideo,
+  SelectionBox,
+} from "@/types/canvas";
 import { checkOS } from "@/utils/os-utils";
 
 // Import additional extracted components
@@ -112,7 +117,6 @@ export default function OverlayPage() {
   const [images, setImages] = useState<PlacedImage[]>([]);
   const [videos, setVideos] = useState<PlacedVideo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
   const [visibleIndicators, setVisibleIndicators] = useState<Set<string>>(
     new Set(),
   );
@@ -158,6 +162,8 @@ export default function OverlayPage() {
     useState(false);
   const [selectedModelForDetails, setSelectedModelForDetails] =
     useState<MediaModel | null>(null);
+  const [generationSettings, setGenerationSettings] =
+    useState<GenerationSettings>({ prompt: "", loraUrl: "" });
 
   const { showGrid, setShowGrid, showMinimap, setShowMinimap } =
     useCanvasPreferences();
@@ -192,6 +198,7 @@ export default function OverlayPage() {
     handleFileUpload: uploadFilesToCanvas,
     handleDrop: persistDrop,
     loadDefaultImages,
+    clearStorage,
   } = useCanvasPersistence({
     images,
     videos,
@@ -243,15 +250,13 @@ export default function OverlayPage() {
     saveToHistory,
   });
 
-  const { processGenerationResult, extractJobAsset } = useImageGeneration();
+  const { processGenerationResult } = useImageGeneration();
   const imageToImage = useImageToImage({
     images,
     selectedIds,
   });
 
   const {
-    generationSettings,
-    setGenerationSettings,
     modelParameters,
     setModelParameters,
     isGenerating,
@@ -273,13 +278,13 @@ export default function OverlayPage() {
     toast,
     imageToImage,
     processGenerationResult,
-    extractJobAsset,
     saveToStorage,
     activeVideoGenerationsCount: activeVideoGenerations.size,
     isRemovingVideoBackground,
     isIsolating,
     isExtendingVideo,
     isTransformingVideo,
+    generationSettings,
   });
 
   const handleConvertToVideo = useCallback(
@@ -2060,7 +2065,7 @@ export default function OverlayPage() {
                                   "Clear all saved data? This cannot be undone.",
                                 )
                               ) {
-                                await canvasStorage.clearAll();
+                                await clearStorage();
                                 setImages([]);
                                 setViewport({ x: 0, y: 0, scale: 1 });
                                 toast({

@@ -34,6 +34,7 @@ interface UseCanvasPersistenceResult {
   ) => void;
   handleDrop: (event: DragEvent, stage: Konva.Stage | null) => void;
   loadDefaultImages: () => Promise<void>;
+  clearStorage: () => Promise<void>;
 }
 
 const DEFAULT_IMAGES = [
@@ -305,7 +306,7 @@ export function useCanvasPersistence({
   );
 
   const handleDrop = useCallback(
-    (event: DragEvent<HTMLElement>, stage: Konva.Stage | null) => {
+    (event: DragEvent, stage: Konva.Stage | null) => {
       event.preventDefault();
 
       if (stage) {
@@ -323,6 +324,15 @@ export function useCanvasPersistence({
     [handleFileUpload],
   );
 
+  const clearStorage = useCallback(async () => {
+    try {
+      await canvasStorage.clearAll();
+    } catch (error) {
+      console.error("Failed to clear storage:", error);
+      throw error;
+    }
+  }, []);
+
   return {
     isStorageLoaded,
     saveToStorage,
@@ -330,5 +340,6 @@ export function useCanvasPersistence({
     handleFileUpload,
     handleDrop,
     loadDefaultImages,
+    clearStorage,
   };
 }
