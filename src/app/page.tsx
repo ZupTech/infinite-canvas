@@ -3833,7 +3833,7 @@ export default function OverlayPage() {
 
           <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-2">
             {/* Unite logo */}
-            <div className="md:hidden border bg-background/80 py-2 px-3 flex flex-row rounded-xl gap-2 items-center">
+            <div className="md:hidden py-2 px-3 flex flex-row gap-2 items-center">
               <Link
                 href="https://unite.ai"
                 target="_blank"

@@ -376,7 +376,11 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
 
         <div className="w-2/3 space-y-4">
           {promptParam && renderParameterField(promptParam)}
-          {primaryParams.map((param) => renderParameterField(param))}
+          {primaryParams.map((param, index) => (
+            <div key={`primary-${param.name}-${index}`}>
+              {renderParameterField(param)}
+            </div>
+          ))}
 
           {hasAdvancedOptions && (
             <Button
@@ -512,8 +516,8 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                         Este modelo não possui parâmetros adicionais.
                       </p>
                     ) : (
-                      secondaryParams.map((param) => (
-                        <div key={param.name}>
+                      secondaryParams.map((param, index) => (
+                        <div key={`${param.name}-${index}`}>
                           {renderParameterField(param)}
                         </div>
                       ))
