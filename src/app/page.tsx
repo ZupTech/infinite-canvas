@@ -127,6 +127,7 @@ import {
   supportsImageInput,
   type MediaModel as UniteMediaModel,
 } from "@/utils/model-utils";
+import { getVideoModelById } from "@/lib/video-models";
 
 type MediaModelType = "image" | "video" | "upscale" | "audio" | "text";
 
@@ -337,6 +338,8 @@ export default function OverlayPage() {
     if (!image) return;
 
     let toastId: string | undefined;
+    // Create a unique ID for this generation
+    const generationId = `img2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
       setIsConvertingToVideo(true);
@@ -359,9 +362,6 @@ export default function OverlayPage() {
           );
         }
       }
-
-      // Create a unique ID for this generation
-      const generationId = `img2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       const modelId = settings.modelId || settings.styleId;
       const model = modelId
@@ -434,7 +434,7 @@ export default function OverlayPage() {
           modelConfig: model,
           resolution:
             (typeof parameters.resolution === "string"
-              ? parameters.resolution
+              ? (parameters.resolution as "480p" | "720p" | "1080p")
               : settings.resolution) || "720p",
           cameraFixed:
             typeof parameters.cameraFixed === "boolean"
@@ -564,6 +564,8 @@ export default function OverlayPage() {
     if (!video) return;
 
     let toastId: string | undefined;
+    // Create a unique ID for this generation
+    const generationId = `vid2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
       setIsTransformingVideo(true);
@@ -586,9 +588,6 @@ export default function OverlayPage() {
           );
         }
       }
-
-      // Create a unique ID for this generation
-      const generationId = `vid2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       // Add to active generations
       setActiveVideoGenerations((prev) => {
@@ -729,6 +728,8 @@ export default function OverlayPage() {
     if (!video) return;
 
     let toastId: string | undefined;
+    // Create a unique ID for this generation
+    const generationId = `vid_ext_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
       setIsExtendingVideo(true);
@@ -751,9 +752,6 @@ export default function OverlayPage() {
           );
         }
       }
-
-      // Create a unique ID for this generation
-      const generationId = `vid_ext_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       // Add to active generations
       setActiveVideoGenerations((prev) => {
@@ -2584,6 +2582,8 @@ export default function OverlayPage() {
     if (!video) return;
 
     let toastId: string | undefined;
+    // Create a unique ID for this generation
+    const generationId = `bg_removal_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     try {
       setIsRemovingVideoBackground(true);
@@ -2611,9 +2611,6 @@ export default function OverlayPage() {
           );
         }
       }
-
-      // Create a unique ID for this generation
-      const generationId = `bg_removal_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
       // Map the background color to the API's expected format
       const colorMap: Record<string, string> = {
@@ -4262,9 +4259,9 @@ export default function OverlayPage() {
                   </Button>
                   {/* Model options button */}
                   <ModelParametersButton
-                    model={selectedMediaModel}
+                    model={selectedMediaModel as any}
                     onOpenParameters={(model) => {
-                      setSelectedModelForDetails(model);
+                      setSelectedModelForDetails(model as any);
                       setIsModelDetailsDialogOpen(true);
                     }}
                   />
@@ -4668,7 +4665,7 @@ export default function OverlayPage() {
       <ModelDetailsDialog
         open={isModelDetailsDialogOpen}
         onOpenChange={setIsModelDetailsDialogOpen}
-        model={selectedModelForDetails}
+        model={selectedModelForDetails as any}
         onSave={(parameters) => {
           setModelParameters(parameters);
           console.log("Parâmetros salvos:", parameters);
