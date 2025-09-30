@@ -1,6 +1,5 @@
 import React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useTheme } from "next-themes";
 
 export const PoweredByUniteBadge: React.FC = () => {
@@ -20,13 +19,7 @@ export const PoweredByUniteBadge: React.FC = () => {
         rel="noopener noreferrer"
         className="p-2 flex flex-row items-center"
       >
-        <Image
-          src={logoUrl}
-          alt="Unite logo"
-          width={120}
-          height={36}
-          priority
-        />
+        <img src={logoUrl} alt="Unite logo" className="h-9 w-auto" />
       </Link>
     </div>
   );
