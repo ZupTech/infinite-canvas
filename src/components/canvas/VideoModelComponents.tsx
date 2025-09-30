@@ -526,9 +526,9 @@ export const RemoveVideoBackgroundDialog: React.FC<
       <DialogContent className="max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Remove Video Background</DialogTitle>
+            <DialogTitle>Remover Fundo do Vídeo</DialogTitle>
             <DialogDescription>
-              Configure background removal settings for your video
+              Configure as opções de remoção de fundo para seu vídeo
             </DialogDescription>
           </DialogHeader>
 
@@ -543,13 +543,13 @@ export const RemoveVideoBackgroundDialog: React.FC<
                 ) : previewUrl ? (
                   <img
                     src={previewUrl}
-                    alt="Video preview"
+                    alt="Prévia do vídeo"
                     className="w-full h-full object-contain"
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center">
                     <span className="text-muted-foreground text-sm">
-                      No preview available
+                      Nenhuma prévia disponível
                     </span>
                   </div>
                 )}
@@ -562,14 +562,14 @@ export const RemoveVideoBackgroundDialog: React.FC<
                 <span className="font-medium">
                   ${(videoDuration * 0.14).toFixed(2)}
                 </span>{" "}
-                for {Math.floor(videoDuration)}s video • Processing may take
-                several minutes
+                para vídeo de {Math.floor(videoDuration)}s • O processamento
+                pode levar vários minutos
               </AlertDescription>
             </Alert>
 
             {/* Background color options */}
             <div className="space-y-3">
-              <Label>Background Color</Label>
+              <Label>Cor do Fundo</Label>
               <RadioGroup
                 value={backgroundColor}
                 onValueChange={handleRadioChange}
@@ -600,7 +600,7 @@ export const RemoveVideoBackgroundDialog: React.FC<
               disabled={isProcessing}
               className="border border-border bg-background hover:bg-muted/50"
             >
-              Cancel
+              Cancelar
             </Button>
             <Button
               type="submit"
@@ -611,11 +611,11 @@ export const RemoveVideoBackgroundDialog: React.FC<
               {isProcessing ? (
                 <>
                   <SpinnerIcon className="h-4 w-4 animate-spin" />
-                  Processing...
+                  Processando...
                 </>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span>Run</span>
+                  <span>Executar</span>
                   <span className="flex flex-row space-x-0.5">
                     <kbd className="flex items-center justify-center tracking-tighter rounded-xl border px-1 font-mono bg-white/10 border-white/10 h-6 min-w-6 text-xs">
                       ⌘

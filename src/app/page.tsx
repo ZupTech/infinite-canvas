@@ -453,8 +453,8 @@ export default function OverlayPage() {
       });
 
       toastId = toast({
-        title: `Converting image to video (${model.name || "Video Model"})`,
-        description: "This may take a minute...",
+        title: `Convertendo imagem para vídeo (${model.name || "Modelo de Vídeo"})`,
+        description: "Isso pode levar um minuto...",
         duration: Infinity,
       }).id;
 
@@ -529,9 +529,11 @@ export default function OverlayPage() {
         dismiss(toastId);
       }
       toast({
-        title: "Conversion failed",
+        title: "Falha na conversão",
         description:
-          error instanceof Error ? error.message : "Failed to start conversion",
+          error instanceof Error
+            ? error.message
+            : "Falha ao iniciar a conversão",
         variant: "destructive",
       });
       setActiveVideoGenerations((prev) => {
@@ -618,8 +620,8 @@ export default function OverlayPage() {
 
       // Create a persistent toast
       toastId = toast({
-        title: `Transforming video (${modelName} - ${settings.resolution || "Default"})`,
-        description: "This may take a minute...",
+        title: `Transformando vídeo (${modelName} - ${settings.resolution || "Padrão"})`,
+        description: "Isso pode levar um minuto...",
         duration: Infinity,
       }).id;
 
@@ -694,7 +696,7 @@ export default function OverlayPage() {
         dismiss(toastId);
       }
       toast({
-        title: "Transformation failed",
+        title: "Falha na transformação",
         description:
           error instanceof Error
             ? error.message
@@ -784,8 +786,8 @@ export default function OverlayPage() {
 
       // Create a persistent toast
       toastId = toast({
-        title: `Extending video (${modelName} - ${settings.resolution || "Default"})`,
-        description: "This may take a minute...",
+        title: `Estendendo vídeo (${modelName} - ${settings.resolution || "Padrão"})`,
+        description: "Isso pode levar um minuto...",
         duration: Infinity,
       }).id;
 
@@ -861,7 +863,7 @@ export default function OverlayPage() {
         dismiss(toastId);
       }
       toast({
-        title: "Extension failed",
+        title: "Falha ao estender",
         description:
           error instanceof Error
             ? error.message
@@ -940,15 +942,15 @@ export default function OverlayPage() {
 
           // Show success toast
           toast({
-            title: "Video created successfully",
+            title: "Vídeo criado com sucesso",
             description:
-              "The video has been added to the right of the source image.",
+              "O vídeo foi adicionado à direita da imagem de origem.",
           });
         } else {
           console.error("Source image not found:", sourceImageId);
           toast({
-            title: "Error creating video",
-            description: "The source image could not be found.",
+            title: "Erro ao criar vídeo",
+            description: "A imagem de origem não foi encontrada.",
             variant: "destructive",
           });
         }
@@ -990,30 +992,30 @@ export default function OverlayPage() {
 
             if (isExtension) {
               toast({
-                title: "Video extended successfully",
+                title: "Vídeo estendido com sucesso",
                 description:
-                  "The extended video has been added to the right of the source video.",
+                  "O vídeo estendido foi adicionado à direita do vídeo de origem.",
               });
             } else if (
               generation?.modelId === "bria-video-background-removal"
             ) {
               toast({
-                title: "Background removed successfully",
+                title: "Fundo removido com sucesso",
                 description:
-                  "The video with removed background has been added to the right of the source video.",
+                  "O vídeo com fundo removido foi adicionado à direita do vídeo de origem.",
               });
             } else {
               toast({
-                title: "Video transformed successfully",
+                title: "Vídeo transformado com sucesso",
                 description:
-                  "The transformed video has been added to the right of the source video.",
+                  "O vídeo transformado foi adicionado à direita do vídeo de origem.",
               });
             }
           } else {
             console.error("Source video not found:", sourceVideoId);
             toast({
-              title: "Error creating video",
-              description: "The source video could not be found.",
+              title: "Erro ao criar vídeo",
+              description: "O vídeo de origem não foi encontrado.",
               variant: "destructive",
             });
           }
@@ -1029,8 +1031,9 @@ export default function OverlayPage() {
         // For now, just log it as the placement function is missing
         console.log("Generated video URL:", videoUrl);
         toast({
-          title: "Video generated",
-          description: "Video is ready but cannot be placed on canvas yet.",
+          title: "Vídeo gerado",
+          description:
+            "Vídeo está pronto mas ainda não pode ser colocado no canvas.",
         });
       }
 
@@ -1052,9 +1055,9 @@ export default function OverlayPage() {
       console.error("Error completing video generation:", error);
 
       toast({
-        title: "Error creating video",
+        title: "Erro ao criar vídeo",
         description:
-          error instanceof Error ? error.message : "Failed to create video",
+          error instanceof Error ? error.message : "Falha ao criar vídeo",
         variant: "destructive",
       });
 
@@ -1258,8 +1261,8 @@ export default function OverlayPage() {
     } catch (error) {
       console.error("Failed to load from storage:", error);
       toast({
-        title: "Failed to restore canvas",
-        description: "Starting with a fresh canvas",
+        title: "Falha ao restaurar canvas",
+        description: "Começando com um canvas novo",
         variant: "destructive",
       });
     } finally {
@@ -2164,8 +2167,8 @@ export default function OverlayPage() {
 
     if (!prompt) {
       toast({
-        title: "Prompt required",
-        description: "Please enter a prompt before generating",
+        title: "Prompt necessário",
+        description: "Por favor, insira um prompt antes de gerar",
         variant: "destructive",
       });
       return;
@@ -2191,8 +2194,8 @@ export default function OverlayPage() {
 
     if (!targetModel) {
       toast({
-        title: "Select a model",
-        description: "Choose a model from the catalog before generating",
+        title: "Selecione um modelo",
+        description: "Escolha um modelo do catálogo antes de gerar",
         variant: "destructive",
       });
       return;
@@ -2202,8 +2205,8 @@ export default function OverlayPage() {
     const allowedTypes = ["image", "upscale", "video"];
     if (!allowedTypes.includes(targetModel.type)) {
       toast({
-        title: "Unsupported model",
-        description: `Model type "${targetModel.type}" is not supported in the canvas.`,
+        title: "Modelo não suportado",
+        description: `Tipo de modelo "${targetModel.type}" não é suportado no canvas.`,
         variant: "destructive",
       });
       return;
@@ -2451,9 +2454,9 @@ export default function OverlayPage() {
         );
       } else {
         toast({
-          title: "Generation started",
+          title: "Geração iniciada",
           description:
-            "Hang tight, we will add the result to the canvas automatically.",
+            "Aguarde, adicionaremos o resultado ao canvas automaticamente.",
         });
       }
     } catch (error) {
@@ -2475,7 +2478,7 @@ export default function OverlayPage() {
       setIsGenerating(false);
 
       toast({
-        title: "Generation failed",
+        title: "Falha na geração",
         description: message,
         variant: "destructive",
       });
@@ -2648,8 +2651,8 @@ export default function OverlayPage() {
 
       // Create a persistent toast that will stay visible until the conversion completes
       toastId = toast({
-        title: "Removing background from video",
-        description: "This may take several minutes...",
+        title: "Removendo fundo do vídeo",
+        description: "Isso pode levar vários minutos...",
         duration: Infinity, // Make the toast stay until manually dismissed
       }).id;
 
@@ -2725,7 +2728,7 @@ export default function OverlayPage() {
         dismiss(toastId);
       }
       toast({
-        title: "Error processing video",
+        title: "Erro ao processar vídeo",
         description:
           error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
@@ -2843,8 +2846,8 @@ export default function OverlayPage() {
 
       // Show loading state
       toast({
-        title: "Processing...",
-        description: `Isolating "${isolateInputValue}" from image`,
+        title: "Processando...",
+        description: `Isolando "${isolateInputValue}" da imagem`,
       });
 
       // Process the image to get the cropped/processed version
@@ -3005,16 +3008,16 @@ export default function OverlayPage() {
           setSelectedIds([newImage.id]);
 
           toast({
-            title: "Success",
-            description: `Isolated "${isolateInputValue}" successfully`,
+            title: "Sucesso",
+            description: `"${isolateInputValue}" isolado com sucesso`,
           });
         };
 
         testImg.onerror = (e) => {
           console.error("Failed to load new image:", e);
           toast({
-            title: "Failed to load isolated image",
-            description: "The isolated image could not be loaded",
+            title: "Falha ao carregar imagem isolada",
+            description: "A imagem isolada não pôde ser carregada",
             variant: "destructive",
           });
         };
@@ -3022,8 +3025,8 @@ export default function OverlayPage() {
         testImg.src = result.url;
       } else {
         toast({
-          title: "No object found",
-          description: `Could not find "${isolateInputValue}" in the image`,
+          title: "Nenhum objeto encontrado",
+          description: `Não foi possível encontrar "${isolateInputValue}" na imagem`,
           variant: "destructive",
         });
       }
@@ -3035,7 +3038,7 @@ export default function OverlayPage() {
     } catch (error) {
       console.error("Error isolating object:", error);
       toast({
-        title: "Failed to isolate object",
+        title: "Falha ao isolar objeto",
         description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
@@ -3388,7 +3391,7 @@ export default function OverlayPage() {
             multiImageHandlers.onError(id, error);
             setImages((prev) => prev.filter((img) => img.id !== id));
             toast({
-              title: "Generation failed",
+              title: "Falha na geração",
               description: error.toString(),
               variant: "destructive",
             });
@@ -3941,7 +3944,7 @@ export default function OverlayPage() {
                         onClick={undo}
                         disabled={historyIndex <= 0}
                         className="rounded-none"
-                        title="Undo"
+                        title="Desfazer"
                       >
                         <Undo className="h-4 w-4" />
                       </Button>
@@ -3952,7 +3955,7 @@ export default function OverlayPage() {
                         onClick={redo}
                         disabled={historyIndex >= history.length - 1}
                         className="rounded-none"
-                        title="Redo"
+                        title="Refazer"
                       >
                         <Redo className="h-4 w-4" strokeWidth={2} />
                       </Button>
@@ -3972,7 +3975,7 @@ export default function OverlayPage() {
                         <div className="flex items-center gap-2 text-xs font-medium">
                           <ImageIcon className="w-4 h-4 text-blue-600 dark:text-blue-500" />
                           <span className="text-blue-600 dark:text-blue-500">
-                            Image to Image
+                            Imagem para Imagem
                           </span>
                         </div>
                       ) : (
@@ -3981,7 +3984,7 @@ export default function OverlayPage() {
                             T
                           </span>
                           <span className="text-orange-600 dark:text-orange-500">
-                            Text to Image
+                            Texto para Imagem
                           </span>
                         </div>
                       )}
@@ -3999,27 +4002,27 @@ export default function OverlayPage() {
                             onClick={async () => {
                               if (
                                 confirm(
-                                  "Clear all saved data? This cannot be undone.",
+                                  "Limpar todos os dados salvos? Esta ação não pode ser desfeita.",
                                 )
                               ) {
                                 await canvasStorage.clearAll();
                                 setImages([]);
                                 setViewport({ x: 0, y: 0, scale: 1 });
                                 toast({
-                                  title: "Storage cleared",
+                                  title: "Armazenamento limpo",
                                   description:
-                                    "All saved data has been removed",
+                                    "Todos os dados salvos foram removidos",
                                 });
                               }
                             }}
                             className="bg-destructive/10 text-destructive hover:bg-destructive/20"
-                            title="Clear storage"
+                            title="Limpar armazenamento"
                           >
                             <Trash2 className="h-3 w-3" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent className="text-destructive">
-                          <span>Clear</span>
+                          <span>Limpar</span>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -4038,7 +4041,7 @@ export default function OverlayPage() {
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <span>Settings</span>
+                          <span>Configurações</span>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -4054,7 +4057,7 @@ export default function OverlayPage() {
                         prompt: e.target.value,
                       })
                     }
-                    placeholder={`Enter a prompt... (${checkOS("Win") || checkOS("Linux") ? "Ctrl" : "⌘"}+Enter to run)`}
+                    placeholder={`Digite um prompt... (${checkOS("Win") || checkOS("Linux") ? "Ctrl" : "⌘"}+Enter para executar)`}
                     className="w-full h-20 resize-none border-none p-2 pr-36"
                     style={{ fontSize: "16px" }}
                     onKeyDown={(e) => {
@@ -4124,7 +4127,7 @@ export default function OverlayPage() {
                           loraUrl: e.target.value,
                         })
                       }
-                      placeholder="Kontext LoRA URL (optional)"
+                      placeholder="URL do Kontext LoRA (opcional)"
                       style={{ fontSize: "16px" }}
                     />
                     <Button
@@ -4137,7 +4140,7 @@ export default function OverlayPage() {
                           "_blank",
                         );
                       }}
-                      title="Browse Kontext LoRAs"
+                      title="Navegar pelos Kontext LoRAs"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
@@ -4160,7 +4163,7 @@ export default function OverlayPage() {
                             }));
                           }
                         }}
-                        title="Go back to previous style"
+                        title="Voltar ao estilo anterior"
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -4299,9 +4302,9 @@ export default function OverlayPage() {
                                 } catch (error) {
                                   console.error("File upload error:", error);
                                   toast({
-                                    title: "Upload failed",
+                                    title: "Falha no envio",
                                     description:
-                                      "Failed to process selected files",
+                                      "Falha ao processar arquivos selecionados",
                                     variant: "destructive",
                                   });
                                 } finally {
@@ -4332,9 +4335,9 @@ export default function OverlayPage() {
                                     error,
                                   );
                                   toast({
-                                    title: "Upload unavailable",
+                                    title: "Envio indisponível",
                                     description:
-                                      "File upload is not available. Try using drag & drop instead.",
+                                      "O envio de arquivos não está disponível. Tente usar arrastar e soltar.",
                                     variant: "destructive",
                                   });
                                   if (input.parentNode) {
@@ -4350,13 +4353,13 @@ export default function OverlayPage() {
                                 }
                               }, 30000); // 30 second cleanup
                             }}
-                            title="Upload images"
+                            title="Enviar imagens"
                           >
                             <Paperclip className="h-4 w-4" />
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent>
-                          <span>Upload</span>
+                          <span>Enviar</span>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -4386,7 +4389,7 @@ export default function OverlayPage() {
                         </TooltipTrigger>
                         <TooltipContent>
                           <div className="flex items-center gap-2">
-                            <span>Run</span>
+                            <span>Executar</span>
                             <ShortcutBadge
                               variant="default"
                               size="xs"
@@ -4478,16 +4481,16 @@ export default function OverlayPage() {
       >
         <DialogContent className="w-[95vw] max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Settings</DialogTitle>
+            <DialogTitle>Configurações</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-6">
             {/* Appearance */}
             <div className="flex justify-between">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="appearance">Appearance</Label>
+                <Label htmlFor="appearance">Aparência</Label>
                 <p className="text-sm text-muted-foreground">
-                  Customize how infinite-kanvas looks on your device.
+                  Personalize como o infinite-kanvas aparece no seu dispositivo.
                 </p>
               </div>
               <Select
@@ -4505,26 +4508,32 @@ export default function OverlayPage() {
                     ) : (
                       <MonitorIcon className="size-4" />
                     )}
-                    <span className="capitalize">{theme || "system"}</span>
+                    <span className="capitalize">
+                      {theme === "system"
+                        ? "sistema"
+                        : theme === "light"
+                          ? "claro"
+                          : "escuro"}
+                    </span>
                   </div>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
                   <SelectItem value="system" className="rounded-lg">
                     <div className="flex items-center gap-2">
                       <MonitorIcon className="size-4" />
-                      <span>System</span>
+                      <span>Sistema</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="light" className="rounded-lg">
                     <div className="flex items-center gap-2">
                       <SunIcon className="size-4" />
-                      <span>Light</span>
+                      <span>Claro</span>
                     </div>
                   </SelectItem>
                   <SelectItem value="dark" className="rounded-lg">
                     <div className="flex items-center gap-2">
                       <MoonIcon className="size-4" />
-                      <span>Dark</span>
+                      <span>Escuro</span>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -4534,9 +4543,9 @@ export default function OverlayPage() {
             {/* Grid */}
             <div className="flex justify-between">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="grid">Show Grid</Label>
+                <Label htmlFor="grid">Mostrar Grade</Label>
                 <p className="text-sm text-muted-foreground">
-                  Show a grid on the canvas to help you align your images.
+                  Exibe uma grade no canvas para ajudar a alinhar suas imagens.
                 </p>
               </div>
               <Switch
@@ -4549,9 +4558,9 @@ export default function OverlayPage() {
             {/* Minimap */}
             <div className="flex justify-between">
               <div className="flex flex-col gap-2">
-                <Label htmlFor="minimap">Show Minimap</Label>
+                <Label htmlFor="minimap">Mostrar Minimapa</Label>
                 <p className="text-sm text-muted-foreground">
-                  Show a minimap in the corner to navigate the canvas.
+                  Exibe um minimapa no canto para navegar pelo canvas.
                 </p>
               </div>
               <Switch

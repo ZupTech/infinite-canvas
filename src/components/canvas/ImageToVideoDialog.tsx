@@ -346,7 +346,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     if (error) {
       return (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
-          <span>Failed to load video models.</span>
+          <span>Falha ao carregar modelos de vídeo.</span>
           <span className="text-xs text-muted-foreground/80">{error}</span>
         </div>
       );
@@ -355,7 +355,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     if (!selectedModel) {
       return (
         <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
-          <span>No compatible video models available.</span>
+          <span>Nenhum modelo de vídeo compatível disponível.</span>
         </div>
       );
     }
@@ -367,7 +367,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
             {imageUrl && (
               <img
                 src={imageUrl}
-                alt="Source image"
+                alt="Imagem de origem"
                 className="w-full h-full object-contain"
               />
             )}
@@ -386,7 +386,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
               className="px-0 pr-4 flex gap-2 text-sm"
             >
               <ChevronRight className="h-4 w-4" />
-              More Options
+              Mais Opções
             </Button>
           )}
         </div>
@@ -398,15 +398,15 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px] p-5">
         <DialogHeader>
-          <DialogTitle>Convert Image to Video</DialogTitle>
+          <DialogTitle>Converter Imagem para Vídeo</DialogTitle>
           <DialogDescription>
-            Transform your static image into a dynamic video using AI.
+            Transforme sua imagem estática em um vídeo dinâmico usando IA.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="py-2 space-y-4">
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Model</Label>
+            <Label className="text-sm font-medium">Modelo</Label>
             <Select
               value={selectedModelId ?? ""}
               onValueChange={(value) => {
@@ -422,10 +422,10 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                 <SelectValue
                   placeholder={
                     isLoading
-                      ? "Loading models..."
+                      ? "Carregando modelos..."
                       : videoModels.length === 0
-                        ? "No video models available"
-                        : "Select a model"
+                        ? "Nenhum modelo de vídeo disponível"
+                        : "Selecione um modelo"
                   }
                 />
               </SelectTrigger>
@@ -455,7 +455,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
               onClick={onClose}
               disabled={isConverting}
             >
-              Cancel
+              Cancelar
             </Button>
             <Button
               type="submit"
@@ -466,11 +466,11 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
               {isConverting ? (
                 <>
                   <SpinnerIcon className="h-4 w-4 animate-spin text-white" />
-                  <span className="text-white">Converting...</span>
+                  <span className="text-white">Convertendo...</span>
                 </>
               ) : (
                 <div className="flex items-center gap-2">
-                  <span className="text-white">Run</span>
+                  <span className="text-white">Executar</span>
                   <span className="flex flex-row space-x-0.5">
                     <kbd className="flex items-center justify-center text-white tracking-tighter rounded-xl border px-1 font-mono bg-white/10 border-white/10 h-6 min-w-6 text-xs">
                       ↵
@@ -495,7 +495,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
             <div className="fixed top-0 right-0 h-full w-96 bg-card shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
               <div className="h-full flex flex-col">
                 <div className="flex items-center justify-between p-3 border-b">
-                  <h3 className="font-semibold text-lg">Advanced Options</h3>
+                  <h3 className="font-semibold text-lg">Opções Avançadas</h3>
                   <Button
                     type="button"
                     size="sm"
@@ -509,7 +509,7 @@ export const ImageToVideoDialog: React.FC<ImageToVideoDialogProps> = ({
                   <div className="space-y-4">
                     {secondaryParams.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        This model has no additional parameters.
+                        Este modelo não possui parâmetros adicionais.
                       </p>
                     ) : (
                       secondaryParams.map((param) => (

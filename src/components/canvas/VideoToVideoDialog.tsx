@@ -91,9 +91,10 @@ export const VideoToVideoDialog: React.FC<VideoToVideoDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px] p-5 bg-background">
         <DialogHeader>
-          <DialogTitle>Video to Video</DialogTitle>
+          <DialogTitle>Vídeo para Vídeo</DialogTitle>
           <DialogDescription>
-            Transform your video with AI-powered style transfer and effects.
+            Transforme seu vídeo com transferência de estilo e efeitos baseados
+            em IA.
           </DialogDescription>
         </DialogHeader>
 
@@ -153,7 +154,7 @@ export const VideoToVideoDialog: React.FC<VideoToVideoDialogProps> = ({
                     className="w-full flex items-center justify-center gap-2 text-sm"
                   >
                     <ChevronRight className="h-4 w-4" />
-                    More Options
+                    Mais Opções
                   </Button>
                 )}
             </div>
@@ -161,16 +162,16 @@ export const VideoToVideoDialog: React.FC<VideoToVideoDialogProps> = ({
 
           <DialogFooter>
             <Button type="button" onClick={onClose} disabled={isConverting}>
-              Cancel
+              Cancelar
             </Button>
             <Button type="submit" variant="primary" disabled={isConverting}>
               {isConverting ? (
                 <>
                   <SpinnerIcon className="mr-2 h-4 w-4 animate-spin text-white" />
-                  <span className="text-white">Converting...</span>
+                  <span className="text-white">Convertendo...</span>
                 </>
               ) : (
-                <span className="text-white">Transform Video</span>
+                <span className="text-white">Transformar Vídeo</span>
               )}
             </Button>
           </DialogFooter>
@@ -189,7 +190,7 @@ export const VideoToVideoDialog: React.FC<VideoToVideoDialogProps> = ({
             <div className="fixed top-0 right-0 h-full w-96 bg-background shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
               <div className="h-full flex flex-col">
                 <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
-                  <h3 className="font-semibold text-lg">Advanced Options</h3>
+                  <h3 className="font-semibold text-lg">Opções Avançadas</h3>
                   <Button
                     type="button"
                     size="sm"
