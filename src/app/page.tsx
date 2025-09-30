@@ -164,6 +164,7 @@ const isDisplayableType = (type?: string): type is DisplayableModelType => {
 
 export default function OverlayPage() {
   const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
   const [images, setImages] = useState<PlacedImage[]>([]);
   const [videos, setVideos] = useState<PlacedVideo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -172,6 +173,11 @@ export default function OverlayPage() {
     new Set(),
   );
   const { toast, dismiss } = useToast();
+
+  // Evita erro de hidratação com tema
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const [generationSettings, setGenerationSettings] =
     useState<GenerationSettings>({
@@ -3841,7 +3847,7 @@ export default function OverlayPage() {
               >
                 <img
                   src={
-                    theme === "dark"
+                    mounted && theme === "dark"
                       ? "https://storage.googleapis.com/unite_assets/logos/Unite%20Logo%20Negativo.png"
                       : "https://cdn.prod.website-files.com/686549176db3fc9e575ae4b7/68654b105d4af13cbebc5bf4_Logo%20Positivo%20Unite.png"
                   }
