@@ -159,8 +159,8 @@ export function ModelDetailsDialog({
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {primaryParams.map((param, index) => (
-                      <div key={`${param.name}-${index}`} className="space-y-2">
+                    {primaryParams.map((param) => (
+                      <div key={param.name} className="space-y-2">
                         <Label
                           htmlFor={param.name}
                           className="text-sm font-medium"
@@ -317,8 +317,8 @@ export function ModelDetailsDialog({
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {secondaryParams.map((param, index) => (
-                      <div key={`${param.name}-${index}`} className="space-y-2">
+                    {secondaryParams.map((param) => (
+                      <div key={param.name} className="space-y-2">
                         <Label
                           htmlFor={param.name}
                           className="text-sm font-medium"
