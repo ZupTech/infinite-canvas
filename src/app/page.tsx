@@ -67,7 +67,6 @@ import { ImageToVideoDialog } from "@/components/canvas/ImageToVideoDialog";
 import { VideoToVideoDialog } from "@/components/canvas/VideoToVideoDialog";
 import { ExtendVideoDialog } from "@/components/canvas/ExtendVideoDialog";
 import { RemoveVideoBackgroundDialog } from "@/components/canvas/VideoModelComponents";
-import { getVideoModelById } from "@/lib/video-models";
 
 // Import types
 import type {
@@ -112,6 +111,7 @@ import {
   shouldSkipStorage,
 } from "@/utils/placeholder-utils";
 import { useImageToImage } from "@/hooks/useImageToImage";
+import { ensureRemoteAsset } from "@/utils/upload-media";
 import {
   Select,
   SelectContent,
@@ -121,31 +121,19 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { GenerationsIndicator } from "@/components/generations-indicator";
+import {
+  getImageInputParamName,
+  resolveModelEndpoint,
+  supportsImageInput,
+  type MediaModel as UniteMediaModel,
+} from "@/utils/model-utils";
 
 type MediaModelType = "image" | "video" | "upscale" | "audio" | "text";
 
-interface MediaModel {
-  id: string;
-  name: string;
-  description?: string;
-  provider?: string;
+type MediaModel = UniteMediaModel & {
   type: string;
-  category?: string | null;
-  visible: boolean;
-  featured?: boolean;
-  isNew?: boolean;
-  hasUnlimitedBadge?: boolean;
-  modelId?: string | null;
-  restricted?: boolean | null;
-  ui?: {
-    icon?: string | null;
-    color?: string | null;
-    layout?: string | null;
-    image?: string | null;
-    resolution?: string | null;
-  };
-  [key: string]: any;
-}
+  visible?: boolean;
+};
 
 interface ModelsResponse {
   ui?: Record<string, unknown>;
@@ -182,7 +170,7 @@ export default function OverlayPage() {
   const [visibleIndicators, setVisibleIndicators] = useState<Set<string>>(
     new Set(),
   );
-  const { toast } = useToast();
+  const { toast, dismiss } = useToast();
 
   const [generationSettings, setGenerationSettings] =
     useState<GenerationSettings>({
@@ -348,18 +336,89 @@ export default function OverlayPage() {
     const image = images.find((img) => img.id === selectedImageForVideo);
     if (!image) return;
 
+    let toastId: string | undefined;
+
     try {
       setIsConvertingToVideo(true);
 
-      // Upload image if it's a data URL
-      let imageUrl = image.src;
-      if (imageUrl.startsWith("data:")) {
-        // TODO: Replace with new backend upload
-        imageUrl = imageUrl; // Keep original for now
+      // Ensure the image is available via a remote URL
+      let imageUrl = image.uploadedUrl || image.src;
+      if (!/^https?:\/\//i.test(imageUrl)) {
+        const { url } = await ensureRemoteAsset(imageUrl, {
+          filename: `${image.id}.png`,
+          existingUrl: image.uploadedUrl ?? null,
+        });
+
+        imageUrl = url;
+
+        if (image.uploadedUrl !== url) {
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === image.id ? { ...img, uploadedUrl: url } : img,
+            ),
+          );
+        }
       }
 
       // Create a unique ID for this generation
       const generationId = `img2vid_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+
+      const modelId = settings.modelId || settings.styleId;
+      const model = modelId
+        ? mediaModels.find(
+            (candidate) =>
+              candidate.id === modelId || candidate.modelId === modelId,
+          )
+        : mediaModels.find(
+            (candidate) =>
+              candidate.type === "video" && supportsImageInput(candidate),
+          );
+
+      if (!model) {
+        throw new Error("Selected video model is no longer available.");
+      }
+
+      const hasImageInput = supportsImageInput(model);
+      const resolvedEndpoint = model.endpoint
+        ? model.endpoint
+        : resolveModelEndpoint(model, hasImageInput);
+
+      const parameters: Record<string, any> = {
+        ...settings,
+        sourceImageId: selectedImageForVideo,
+      };
+
+      delete parameters.modelId;
+      delete parameters.styleId;
+      delete parameters.sourceUrl;
+
+      const imageParamName = getImageInputParamName(model);
+      if (imageParamName) {
+        const paramDefinition = model.parameters?.find(
+          (param) => param.name === imageParamName,
+        );
+        const expectsArray = paramDefinition?.type === "multifile";
+        parameters[imageParamName] = expectsArray ? [imageUrl] : imageUrl;
+      } else {
+        parameters.imageUrl = imageUrl;
+        parameters.image_urls = Array.isArray(parameters.image_urls)
+          ? parameters.image_urls
+          : [imageUrl];
+      }
+
+      if (typeof parameters.duration === "string") {
+        const parsed = Number(parameters.duration);
+        if (!Number.isNaN(parsed)) {
+          parameters.duration = parsed;
+        }
+      }
+
+      if (typeof parameters.seed === "string") {
+        const parsedSeed = Number(parameters.seed);
+        if (!Number.isNaN(parsedSeed)) {
+          parameters.seed = parsedSeed;
+        }
+      }
 
       // Add to active generations
       setActiveVideoGenerations((prev) => {
@@ -367,13 +426,95 @@ export default function OverlayPage() {
         newMap.set(generationId, {
           imageUrl,
           prompt: settings.prompt || "",
-          duration: settings.duration || 5,
-          modelId: settings.modelId, // Add video modelId
-          resolution: settings.resolution || "720p",
-          cameraFixed: settings.cameraFixed,
-          seed: settings.seed,
-          sourceImageId: selectedImageForVideo, // Store the source image ID
+          duration:
+            typeof parameters.duration === "number"
+              ? parameters.duration
+              : settings.duration || 5,
+          modelId: model.id,
+          modelConfig: model,
+          resolution:
+            (typeof parameters.resolution === "string"
+              ? parameters.resolution
+              : settings.resolution) || "720p",
+          cameraFixed:
+            typeof parameters.cameraFixed === "boolean"
+              ? parameters.cameraFixed
+              : settings.cameraFixed,
+          seed:
+            typeof parameters.seed === "number"
+              ? parameters.seed
+              : typeof settings.seed === "number"
+                ? settings.seed
+                : undefined,
+          sourceImageId: selectedImageForVideo,
+          status: "queued",
         });
+        return newMap;
+      });
+
+      toastId = toast({
+        title: `Converting image to video (${model.name || "Video Model"})`,
+        description: "This may take a minute...",
+        duration: Infinity,
+      }).id;
+
+      setActiveVideoGenerations((prev) => {
+        const newMap = new Map(prev);
+        const generation = newMap.get(generationId);
+        if (generation) {
+          newMap.set(generationId, {
+            ...generation,
+            toastId,
+          });
+        }
+        return newMap;
+      });
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: model.id,
+          endpoint: resolvedEndpoint,
+          parameters,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText ||
+            `Video generation request failed with status ${response.status}`,
+        );
+      }
+
+      const payload = await response.json();
+      const job = payload.job ?? payload;
+      const realtime = payload.realtime ?? {};
+      const runId = job?.runId || realtime.runId || job?.id;
+      const status =
+        job?.status || job?.output?.status || job?.output?.state || "queued";
+
+      setActiveVideoGenerations((prev) => {
+        const newMap = new Map(prev);
+        const generation = newMap.get(generationId);
+        if (generation) {
+          newMap.set(generationId, {
+            ...generation,
+            jobId: job?.id,
+            runId,
+            status,
+            realtimeToken: realtime.token ?? null,
+            resultUrl:
+              job?.result?.videoUrl ||
+              job?.output?.result?.videoUrl ||
+              generation.resultUrl,
+          });
+        }
         return newMap;
       });
 
@@ -382,32 +523,21 @@ export default function OverlayPage() {
 
       // Close the dialog
       setIsImageToVideoDialogOpen(false);
-
-      // Get video model name for toast display
-      let modelName = "Video Model";
-      const modelId = settings.modelId || "ltx-video"; // Default to ltx-video
-      const { getVideoModelById } = await import("@/lib/video-models");
-      const model = getVideoModelById(modelId);
-      if (model) {
-        modelName = model.name;
-      }
-
-      // Store the toast ID with the generation for later reference
-      setActiveVideoGenerations((prev) => {
-        const newMap = new Map(prev);
-        const generation = newMap.get(generationId);
-        if (generation) {
-          newMap.set(generationId, generation);
-        }
-        return newMap;
-      });
     } catch (error) {
       console.error("Error starting image-to-video conversion:", error);
+      if (toastId) {
+        dismiss(toastId);
+      }
       toast({
         title: "Conversion failed",
         description:
           error instanceof Error ? error.message : "Failed to start conversion",
         variant: "destructive",
+      });
+      setActiveVideoGenerations((prev) => {
+        const next = new Map(prev);
+        next.delete(generationId);
+        return next;
       });
       setIsConvertingToVideo(false);
     }
@@ -431,14 +561,28 @@ export default function OverlayPage() {
     const video = videos.find((vid) => vid.id === selectedVideoForVideo);
     if (!video) return;
 
+    let toastId: string | undefined;
+
     try {
       setIsTransformingVideo(true);
 
-      // Upload video if it's a data URL or local file
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
+      // Upload video if it's not already accessible via HTTP
+      let videoUrl = video.uploadedUrl || video.src;
+      if (!/^https?:\/\//i.test(videoUrl)) {
+        const { url } = await ensureRemoteAsset(videoUrl, {
+          filename: `${video.id}.mp4`,
+          existingUrl: video.uploadedUrl ?? null,
+        });
+
+        videoUrl = url;
+
+        if (video.uploadedUrl !== url) {
+          setVideos((prev) =>
+            prev.map((vid) =>
+              vid.id === video.id ? { ...vid, uploadedUrl: url } : vid,
+            ),
+          );
+        }
       }
 
       // Create a unique ID for this generation
@@ -455,6 +599,7 @@ export default function OverlayPage() {
           resolution: settings.resolution || "720p",
           isVideoToVideo: true,
           sourceVideoId: selectedVideoForVideo,
+          status: "queued",
         });
         return newMap;
       });
@@ -472,7 +617,7 @@ export default function OverlayPage() {
       }
 
       // Create a persistent toast
-      const toastId = toast({
+      toastId = toast({
         title: `Transforming video (${modelName} - ${settings.resolution || "Default"})`,
         description: "This may take a minute...",
         duration: Infinity,
@@ -490,8 +635,64 @@ export default function OverlayPage() {
         }
         return newMap;
       });
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: modelId,
+          endpoint: model?.endpoint,
+          parameters: {
+            ...settings,
+            imageUrl: videoUrl,
+            sourceVideoId: selectedVideoForVideo,
+            isVideoToVideo: true,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText ||
+            `Video transformation request failed with status ${response.status}`,
+        );
+      }
+
+      const payload = await response.json();
+      const job = payload.job ?? payload;
+      const realtime = payload.realtime ?? {};
+      const runId = job?.runId || realtime.runId || job?.id;
+      const status =
+        job?.status || job?.output?.status || job?.output?.state || "queued";
+
+      setActiveVideoGenerations((prev) => {
+        const newMap = new Map(prev);
+        const generation = newMap.get(generationId);
+        if (generation) {
+          newMap.set(generationId, {
+            ...generation,
+            jobId: job?.id,
+            runId,
+            status,
+            realtimeToken: realtime.token ?? null,
+            resultUrl:
+              job?.result?.videoUrl ||
+              job?.output?.result?.videoUrl ||
+              generation.resultUrl,
+          });
+        }
+        return newMap;
+      });
     } catch (error) {
       console.error("Error starting video-to-video transformation:", error);
+      if (toastId) {
+        dismiss(toastId);
+      }
       toast({
         title: "Transformation failed",
         description:
@@ -499,6 +700,11 @@ export default function OverlayPage() {
             ? error.message
             : "Failed to start transformation",
         variant: "destructive",
+      });
+      setActiveVideoGenerations((prev) => {
+        const next = new Map(prev);
+        next.delete(generationId);
+        return next;
       });
       setIsTransformingVideo(false);
     }
@@ -520,14 +726,28 @@ export default function OverlayPage() {
     const video = videos.find((vid) => vid.id === selectedVideoForExtend);
     if (!video) return;
 
+    let toastId: string | undefined;
+
     try {
       setIsExtendingVideo(true);
 
-      // Upload video if it's a data URL or local file
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
+      // Upload video if it's not already accessible via HTTP
+      let videoUrl = video.uploadedUrl || video.src;
+      if (!/^https?:\/\//i.test(videoUrl)) {
+        const { url } = await ensureRemoteAsset(videoUrl, {
+          filename: `${video.id}.mp4`,
+          existingUrl: video.uploadedUrl ?? null,
+        });
+
+        videoUrl = url;
+
+        if (video.uploadedUrl !== url) {
+          setVideos((prev) =>
+            prev.map((vid) =>
+              vid.id === video.id ? { ...vid, uploadedUrl: url } : vid,
+            ),
+          );
+        }
       }
 
       // Create a unique ID for this generation
@@ -545,6 +765,7 @@ export default function OverlayPage() {
           isVideoToVideo: true,
           isVideoExtension: true,
           sourceVideoId: selectedVideoForExtend,
+          status: "queued",
         });
         return newMap;
       });
@@ -562,7 +783,7 @@ export default function OverlayPage() {
       }
 
       // Create a persistent toast
-      const toastId = toast({
+      toastId = toast({
         title: `Extending video (${modelName} - ${settings.resolution || "Default"})`,
         description: "This may take a minute...",
         duration: Infinity,
@@ -580,8 +801,65 @@ export default function OverlayPage() {
         }
         return newMap;
       });
+
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: modelId,
+          endpoint: model?.endpoint,
+          parameters: {
+            ...settings,
+            imageUrl: videoUrl,
+            sourceVideoId: selectedVideoForExtend,
+            isVideoToVideo: true,
+            isVideoExtension: true,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText ||
+            `Video extension request failed with status ${response.status}`,
+        );
+      }
+
+      const payload = await response.json();
+      const job = payload.job ?? payload;
+      const realtime = payload.realtime ?? {};
+      const runId = job?.runId || realtime.runId || job?.id;
+      const status =
+        job?.status || job?.output?.status || job?.output?.state || "queued";
+
+      setActiveVideoGenerations((prev) => {
+        const newMap = new Map(prev);
+        const generation = newMap.get(generationId);
+        if (generation) {
+          newMap.set(generationId, {
+            ...generation,
+            jobId: job?.id,
+            runId,
+            status,
+            realtimeToken: realtime.token ?? null,
+            resultUrl:
+              job?.result?.videoUrl ||
+              job?.output?.result?.videoUrl ||
+              generation.resultUrl,
+          });
+        }
+        return newMap;
+      });
     } catch (error) {
       console.error("Error starting video extension:", error);
+      if (toastId) {
+        dismiss(toastId);
+      }
       toast({
         title: "Extension failed",
         description:
@@ -589,6 +867,11 @@ export default function OverlayPage() {
             ? error.message
             : "Failed to start video extension",
         variant: "destructive",
+      });
+      setActiveVideoGenerations((prev) => {
+        const next = new Map(prev);
+        next.delete(generationId);
+        return next;
       });
       setIsExtendingVideo(false);
     }
@@ -647,7 +930,10 @@ export default function OverlayPage() {
           video.y = image.y; // Keep the same vertical position
 
           // Add the video to the videos state
-          setVideos((prev) => [...prev, { ...video, isVideo: true as const }]);
+          setVideos((prev) => [
+            ...prev,
+            { ...video, isVideo: true as const, uploadedUrl: videoUrl },
+          ]);
 
           // Save to history
           saveToHistory();
@@ -693,6 +979,7 @@ export default function OverlayPage() {
               muted: false,
               isLooping: false,
               isVideo: true as const,
+              uploadedUrl: videoUrl,
             };
 
             // Add the transformed video to the canvas
@@ -2293,6 +2580,8 @@ export default function OverlayPage() {
     );
     if (!video) return;
 
+    let toastId: string | undefined;
+
     try {
       setIsRemovingVideoBackground(true);
 
@@ -2301,11 +2590,23 @@ export default function OverlayPage() {
 
       // Don't show a toast here - the StreamingVideo component will handle progress
 
-      // Upload video if it's a data URL or blob URL
-      let videoUrl = video.src;
-      if (videoUrl.startsWith("data:") || videoUrl.startsWith("blob:")) {
-        // TODO: Replace with new backend upload
-        videoUrl = videoUrl; // Keep original for now
+      // Upload video if it's not already accessible via HTTP
+      let videoUrl = video.uploadedUrl || video.src;
+      if (!/^https?:\/\//i.test(videoUrl)) {
+        const { url } = await ensureRemoteAsset(videoUrl, {
+          filename: `${video.id}.mp4`,
+          existingUrl: video.uploadedUrl ?? null,
+        });
+
+        videoUrl = url;
+
+        if (video.uploadedUrl !== url) {
+          setVideos((prev) =>
+            prev.map((vid) =>
+              vid.id === video.id ? { ...vid, uploadedUrl: url } : vid,
+            ),
+          );
+        }
       }
 
       // Create a unique ID for this generation
@@ -2340,12 +2641,13 @@ export default function OverlayPage() {
           modelConfig: getVideoModelById("bria-video-background-removal"),
           sourceVideoId: video.id,
           backgroundColor: apiBackgroundColor,
+          status: "queued",
         });
         return newMap;
       });
 
       // Create a persistent toast that will stay visible until the conversion completes
-      const toastId = toast({
+      toastId = toast({
         title: "Removing background from video",
         description: "This may take several minutes...",
         duration: Infinity, // Make the toast stay until manually dismissed
@@ -2364,10 +2666,64 @@ export default function OverlayPage() {
         return newMap;
       });
 
-      // Remove the direct API call since StreamingVideo will handle it
-      // The StreamingVideo component will handle the actual API call and progress updates
+      const model = getVideoModelById("bria-video-background-removal");
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          modelId: "bria-video-background-removal",
+          endpoint: model?.endpoint,
+          parameters: {
+            imageUrl: videoUrl,
+            backgroundColor: apiBackgroundColor,
+            sourceVideoId: video.id,
+            isVideoToVideo: true,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          errorText ||
+            `Video background removal request failed with status ${response.status}`,
+        );
+      }
+
+      const payload = await response.json();
+      const job = payload.job ?? payload;
+      const realtime = payload.realtime ?? {};
+      const runId = job?.runId || realtime.runId || job?.id;
+      const status =
+        job?.status || job?.output?.status || job?.output?.state || "queued";
+
+      setActiveVideoGenerations((prev) => {
+        const newMap = new Map(prev);
+        const generation = newMap.get(generationId);
+        if (generation) {
+          newMap.set(generationId, {
+            ...generation,
+            jobId: job?.id,
+            runId,
+            status,
+            realtimeToken: realtime.token ?? null,
+            resultUrl:
+              job?.result?.videoUrl ||
+              job?.output?.result?.videoUrl ||
+              generation.resultUrl,
+          });
+        }
+        return newMap;
+      });
     } catch (error) {
       console.error("Error removing video background:", error);
+      if (toastId) {
+        dismiss(toastId);
+      }
       toast({
         title: "Error processing video",
         description:
@@ -2378,13 +2734,7 @@ export default function OverlayPage() {
       // Remove from active generations
       setActiveVideoGenerations((prev) => {
         const newMap = new Map(prev);
-        const generationId = Array.from(prev.keys()).find(
-          (key) =>
-            prev.get(key)?.sourceVideoId === selectedVideoForBackgroundRemoval,
-        );
-        if (generationId) {
-          newMap.delete(generationId);
-        }
+        newMap.delete(generationId);
         return newMap;
       });
     } finally {
@@ -2544,18 +2894,18 @@ export default function OverlayPage() {
         reader.readAsDataURL(blob);
       });
 
-      // Upload the processed image
-      // TODO: Replace with new backend upload
-      const uploadResult = { url: dataUrl };
+      const { url: uploadedImageUrl } = await ensureRemoteAsset(dataUrl, {
+        filename: `${image.id}-processed.png`,
+      });
 
       // Isolate object using EVF-SAM2
       console.log("Calling isolateObject with:", {
-        imageUrl: uploadResult?.url || "",
+        imageUrl: uploadedImageUrl || "",
         textInput: isolateInputValue,
       });
 
       const result = await isolateObject({
-        imageUrl: uploadResult?.url || "",
+        imageUrl: uploadedImageUrl || "",
         textInput: isolateInputValue,
       });
 
@@ -4228,6 +4578,9 @@ export default function OverlayPage() {
             : ""
         }
         isConverting={isConvertingToVideo}
+        models={mediaModels}
+        isLoading={isModelsLoading}
+        error={modelsError}
       />
 
       <VideoToVideoDialog

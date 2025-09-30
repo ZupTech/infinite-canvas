@@ -12,6 +12,7 @@ export interface PlacedImage {
   cropY?: number;
   cropWidth?: number;
   cropHeight?: number;
+  uploadedUrl?: string;
 }
 
 export interface PlacedVideo extends Omit<PlacedImage, "isGenerated"> {
@@ -87,6 +88,12 @@ export interface ActiveVideoGeneration {
   isVideoToVideo?: boolean; // Indicates if this is a video-to-video transformation
   isVideoExtension?: boolean; // Indicates if this is a video extension
   toastId?: string; // ID of the toast notification
+  resultUrl?: string;
+  jobId?: string;
+  runId?: string;
+  status?: string;
+  realtimeToken?: string | null;
+  error?: string;
   [key: string]: any; // Allow additional model-specific fields
 }
 
