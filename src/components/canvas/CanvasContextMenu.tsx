@@ -102,7 +102,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           ) : (
             <Play className="h-4 w-4 text-content" />
           )}
-          <span>Run</span>
+          <span>Executar</span>
         </div>
         <ShortcutBadge
           variant="alpha"
@@ -118,7 +118,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2"
       >
         <Copy className="h-4 w-4" />
-        Duplicate
+        Duplicar
       </ContextMenuItem>
       <ContextMenuItem
         onClick={() => {
@@ -133,7 +133,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2"
       >
         <Crop className="h-4 w-4" />
-        Crop
+        Cortar
       </ContextMenuItem>
       <ContextMenuItem
         onClick={handleRemoveBackground}
@@ -144,7 +144,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2"
       >
         <Scissors className="h-4 w-4" />
-        Remove Background
+        Remover Fundo
       </ContextMenuItem>
       {selectedIds.length === 1 &&
         handleConvertToVideo &&
@@ -156,7 +156,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
             className="flex items-center gap-2"
           >
             <Video className="h-4 w-4" />
-            Image to Video
+            Imagem para Vídeo
           </ContextMenuItem>
         )}
       {/* Temporarily disabled Video to Video option
@@ -183,7 +183,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
             className="flex items-center gap-2"
           >
             <FilePlus className="h-4 w-4" />
-            Extend Video
+            Estender Vídeo
           </ContextMenuItem>
         )}
       {selectedIds.length === 1 &&
@@ -196,7 +196,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
             className="flex items-center gap-2"
           >
             <Scissors className="h-4 w-4" />
-            Remove Video Background
+            Remover Fundo do Vídeo
           </ContextMenuItem>
         )}
       <ContextMenuSub>
@@ -218,7 +218,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           }}
         >
           <Filter className="h-4 w-4" />
-          Isolate Object
+          Isolar Objeto
         </ContextMenuSubTrigger>
         <ContextMenuSubContent
           className="w-72 p-3"
@@ -233,13 +233,13 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
               htmlFor="isolate-context-input"
               className="text-sm font-medium"
             >
-              What to isolate:
+              O que isolar:
             </Label>
             <div className="flex gap-2">
               <Input
                 id="isolate-context-input"
                 type="text"
-                placeholder="e.g. car, face, person"
+                placeholder="ex: carro, rosto, pessoa"
                 value={isolateInputValue}
                 onChange={(e) => setIsolateInputValue(e.target.value)}
                 style={{ fontSize: "16px" }}
@@ -277,11 +277,11 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
                 {isIsolating ? (
                   <>
                     <SpinnerIcon className="h-4 w-4 animate-spin mr-1 text-white" />
-                    <span className="text-white">Processing...</span>
+                    <span className="text-white">Processando...</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-white">Run</span>
+                    <span className="text-white">Executar</span>
                     <span className="flex flex-row space-x-0.5">
                       <kbd className="flex items-center justify-center text-white tracking-tighter rounded-xl border px-1 font-mono bg-white/10 border-white/10 h-6 min-w-6 text-xs">
                         ↵
@@ -300,7 +300,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2"
       >
         <Combine className="h-4 w-4" />
-        Combine Images
+        Combinar Imagens
       </ContextMenuItem>
       <ContextMenuSub>
         <ContextMenuSubTrigger
@@ -311,7 +311,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           className="flex items-center gap-2"
         >
           <Layers className="h-4 w-4" />
-          Layer Order
+          Ordem das Camadas
         </ContextMenuSubTrigger>
         <ContextMenuSubContent className="w-64" sideOffset={10}>
           <ContextMenuItem
@@ -321,7 +321,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <MoveUp className="h-4 w-4" />
-              <span>Send to Front</span>
+              <span>Trazer para Frente</span>
             </div>
             <ShortcutBadge
               variant="alpha"
@@ -338,7 +338,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <ChevronUp className="h-4 w-4" />
-              <span>Bring Forward</span>
+              <span>Avançar</span>
             </div>
             <ShortcutBadge variant="alpha" size="xs" shortcut="]" />
           </ContextMenuItem>
@@ -349,7 +349,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <ChevronDown className="h-4 w-4" />
-              <span>Send Backward</span>
+              <span>Recuar</span>
             </div>
             <ShortcutBadge variant="alpha" size="xs" shortcut="[" />
           </ContextMenuItem>
@@ -360,7 +360,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
           >
             <div className="flex items-center gap-2">
               <MoveDown className="h-4 w-4" />
-              <span>Send to Back</span>
+              <span>Enviar para Trás</span>
             </div>
             <ShortcutBadge
               variant="alpha"
@@ -388,7 +388,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
             className="flex items-center gap-2"
           >
             <Video className="h-4 w-4" />
-            Export GIF
+            Exportar GIF
           </ContextMenuItem>
         )}
       <ContextMenuItem
@@ -432,7 +432,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2"
       >
         <Download className="h-4 w-4" />
-        Download
+        Baixar
       </ContextMenuItem>
       <ContextMenuItem
         onClick={handleDelete}
@@ -440,7 +440,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
         className="flex items-center gap-2 text-destructive"
       >
         <X className="h-4 w-4" />
-        Delete
+        Excluir
       </ContextMenuItem>
     </ContextMenuContent>
   );

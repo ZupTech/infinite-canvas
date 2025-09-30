@@ -75,7 +75,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         onClick={handleRun}
         disabled={isGenerating || !generationSettings.prompt.trim()}
         className="w-12 h-12 p-0"
-        title="Run"
+        title="Executar"
       >
         {isGenerating ? (
           <SpinnerIcon className="h-12 w-12 animate-spin text-content" />
@@ -90,7 +90,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         onClick={handleDuplicate}
         disabled={selectedIds.length === 0}
         className="w-12 h-12 p-0"
-        title="Duplicate"
+        title="Duplicar"
       >
         <Copy className="h-12 w-12" />
       </Button>
@@ -105,7 +105,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         }}
         disabled={selectedIds.length !== 1}
         className="w-12 h-12 p-0"
-        title="Crop"
+        title="Cortar"
       >
         <Crop className="h-12 w-12" />
       </Button>
@@ -116,7 +116,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         onClick={handleRemoveBackground}
         disabled={selectedIds.length === 0}
         className="w-12 h-12 p-0"
-        title="Remove Background"
+        title="Remover Fundo"
       >
         <Scissors className="h-12 w-12" />
       </Button>
@@ -127,7 +127,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         onClick={handleCombineImages}
         disabled={selectedIds.length < 2}
         className="w-12 h-12 p-0"
-        title="Combine Images"
+        title="Combinar Imagens"
       >
         <Combine className="h-12 w-12" />
       </Button>
@@ -139,7 +139,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
             size="sm"
             disabled={selectedIds.length === 0}
             className="w-12 h-12 p-0"
-            title="Layer Order"
+            title="Ordem das Camadas"
           >
             <Layers className="h-12 w-12" />
           </Button>
@@ -160,7 +160,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
               className="w-full h-12 justify-start gap-3 px-3"
             >
               <MoveUp className="h-6 w-6" />
-              <span className="font-medium">Send to Front</span>
+              <span className="font-medium">Trazer para Frente</span>
             </Button>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -172,7 +172,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
               className="w-full h-12 justify-start gap-3 px-3"
             >
               <ChevronUp className="h-6 w-6" />
-              <span className="font-medium">Bring Forward</span>
+              <span className="font-medium">Avançar</span>
             </Button>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -184,7 +184,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
               className="w-full h-12 justify-start gap-3 px-3"
             >
               <ChevronDown className="h-6 w-6" />
-              <span className="font-medium">Send Backward</span>
+              <span className="font-medium">Recuar</span>
             </Button>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -196,7 +196,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
               className="w-full h-12 justify-start gap-3 px-3"
             >
               <MoveDown className="h-6 w-6" />
-              <span className="font-medium">Send to Back</span>
+              <span className="font-medium">Enviar para Trás</span>
             </Button>
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -218,7 +218,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         }}
         disabled={selectedIds.length === 0}
         className="w-12 h-12 p-0"
-        title="Download"
+        title="Baixar"
       >
         <Download className="h-12 w-12" />
       </Button>
@@ -229,7 +229,7 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         onClick={handleDelete}
         disabled={selectedIds.length === 0}
         className="w-12 h-12 p-0 text-destructive hover:text-destructive"
-        title="Delete"
+        title="Excluir"
       >
         <Trash2 className="h-12 w-12" />
       </Button>

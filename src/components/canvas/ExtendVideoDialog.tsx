@@ -86,7 +86,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
       setOptionValues({
         ...model.defaults,
         prompt:
-          "Continue the video naturally, maintaining the same style and motion...",
+          "Continue o vídeo naturalmente, mantendo o mesmo estilo e movimento...",
       });
     }
   }, [selectedModelId]);
@@ -101,7 +101,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
 
     // Map the dynamic options to the VideoGenerationSettings format
     const settings: VideoGenerationSettings = {
-      prompt: optionValues.prompt || "Continue the video...",
+      prompt: optionValues.prompt || "Continue o vídeo...",
       sourceUrl: videoUrl,
       modelId: selectedModel.id,
       // Include all option values
@@ -124,10 +124,10 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[600px] p-5 bg-background">
         <DialogHeader>
-          <DialogTitle>Extend Video</DialogTitle>
+          <DialogTitle>Estender Vídeo</DialogTitle>
           <DialogDescription>
-            Continue your video by generating additional frames from the last
-            frame.
+            Continue seu vídeo gerando quadros adicionais a partir do último
+            quadro.
           </DialogDescription>
         </DialogHeader>
 
@@ -154,7 +154,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
                     <img
                       src={lastFrameUrl}
                       className="max-w-full max-h-full object-contain"
-                      alt="Last frame"
+                      alt="Último quadro"
                     />
                   ) : videoUrl ? (
                     <video
@@ -168,7 +168,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
                   ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground text-center">
-                  The last frame will be used as the starting point
+                  O último quadro será usado como ponto de partida
                 </p>
               </div>
             </div>
@@ -199,7 +199,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
                     className="w-full flex items-center justify-center gap-2 text-sm"
                   >
                     <ChevronRight className="h-4 w-4" />
-                    More Options
+                    Mais Opções
                   </Button>
                 )}
             </div>
@@ -207,16 +207,16 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
 
           <DialogFooter>
             <Button type="button" onClick={onClose} disabled={isExtending}>
-              Cancel
+              Cancelar
             </Button>
             <Button type="submit" variant="primary" disabled={isExtending}>
               {isExtending ? (
                 <>
                   <SpinnerIcon className="mr-2 h-4 w-4 animate-spin text-white" />
-                  <span className="text-white">Extending...</span>
+                  <span className="text-white">Estendendo...</span>
                 </>
               ) : (
-                <span className="text-white">Extend Video</span>
+                <span className="text-white">Estender Vídeo</span>
               )}
             </Button>
           </DialogFooter>
@@ -235,7 +235,7 @@ export const ExtendVideoDialog: React.FC<ExtendVideoDialogProps> = ({
             <div className="fixed top-0 right-0 h-full w-96 bg-background shadow-xl z-50 transform transition-transform duration-300 ease-in-out">
               <div className="h-full flex flex-col">
                 <div className="flex items-center justify-between p-3 border-b border-border bg-muted/30">
-                  <h3 className="font-semibold text-lg">Advanced Options</h3>
+                  <h3 className="font-semibold text-lg">Opções Avançadas</h3>
                   <Button
                     type="button"
                     size="sm"

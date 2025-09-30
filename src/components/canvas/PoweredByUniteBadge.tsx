@@ -9,7 +9,7 @@ export const PoweredByUniteBadge: React.FC = () => {
         href="https://myunite.ai"
         target="_blank"
         rel="noopener noreferrer"
-        className="border bg-card p-2 flex flex-row rounded-xl items-center"
+        className="p-2 flex flex-row items-center"
       >
         <Image
           src="https://storage.googleapis.com/unite_assets/logos/Unite%20Logo%20Negativo.png"

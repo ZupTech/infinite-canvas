@@ -1,4 +1,5 @@
 import type { PlacedImage } from "@/types/canvas";
+import { ensureRemoteAsset } from "@/utils/upload-media";
 
 interface BackgroundHandlerDeps {
   images: PlacedImage[];
@@ -86,8 +87,12 @@ export const handleRemoveBackground = async (deps: BackgroundHandlerDeps) => {
       });
 
       // Remove background using the API
+      const { url: uploadedImageUrl } = await ensureRemoteAsset(dataUrl, {
+        filename: `${image.id}-processed.png`,
+      });
+
       const result = await removeBackground({
-        imageUrl: dataUrl,
+        imageUrl: uploadedImageUrl,
       });
 
       // Update the image in place
@@ -97,6 +102,7 @@ export const handleRemoveBackground = async (deps: BackgroundHandlerDeps) => {
             ? {
                 ...img,
                 src: result.url,
+                uploadedUrl: result.url,
                 // Remove crop values since we've applied them
                 cropX: undefined,
                 cropY: undefined,

@@ -93,7 +93,7 @@ export const ZoomControls: React.FC<ZoomControlsProps> = ({
           size="sm"
           onClick={handleResetView}
           className="w-10 h-10 p-0 rounded-none"
-          title="Reset view"
+          title="Resetar visualização"
         >
           <Maximize2 className="h-4 w-4" />
         </Button>

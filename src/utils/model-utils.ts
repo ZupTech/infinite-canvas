@@ -8,10 +8,14 @@ export interface MediaModel {
   description?: string;
   provider?: string;
   type: string;
+  endpoint?: string;
+  category?: string | null;
   visible?: boolean;
   featured?: boolean;
   isNew?: boolean;
   hasUnlimitedBadge?: boolean;
+  modelId?: string | null;
+  restricted?: boolean | null;
   pricing?: {
     type: string;
     unit_cost: number;

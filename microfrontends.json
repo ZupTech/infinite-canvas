@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/microfrontends.json",
+  "applications": {
+    "unite_gen": {
+      "development": {
+        "fallback": "myunite.ai",
+        "local": 3024
+      }
+    },
+    "canvas": {
+      "routing": [
+        {
+          "paths": ["/canvas", "/canvas/:path*"]
+        }
+      ],
+      "development": {
+        "local": 3001
+      },
+      "packageName": "web"
+    }
+  }
+}

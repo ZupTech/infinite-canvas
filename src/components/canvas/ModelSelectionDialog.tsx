@@ -50,12 +50,12 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
   );
 
   const dialogTitle = hasSelectedImages
-    ? "Choose Model for Image Edit"
-    : "Choose Model";
+    ? "Escolher Modelo para Editar Imagem"
+    : "Escolher Modelo";
 
   const dialogDescription = hasSelectedImages
-    ? "Select a model to transform your selected image"
-    : "Select a model to generate images or choose Custom to use your own LoRA";
+    ? "Selecione um modelo para transformar sua imagem selecionada"
+    : "Selecione um modelo para gerar imagens ou escolha Personalizado para usar sua própria LoRA";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,18 +87,18 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
                   <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center">
                     <Plus className="h-8 w-8 text-muted-foreground" />
                   </div>
-                  <span className="text-sm font-medium">Custom</span>
+                  <span className="text-sm font-medium">Personalizado</span>
                 </button>
               )}
 
               {isLoading ? (
                 <div className="col-span-full flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                   <SpinnerIcon className="h-4 w-4 animate-spin" />
-                  <span>Loading models...</span>
+                  <span>Carregando modelos...</span>
                 </div>
               ) : error ? (
                 <div className="col-span-full flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
-                  <span>Failed to load models.</span>
+                  <span>Falha ao carregar modelos.</span>
                   <span className="text-xs text-muted-foreground/80">
                     {error}
                   </span>
@@ -107,8 +107,8 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
                 <div className="col-span-full flex flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
                   <span>
                     {hasSelectedImages
-                      ? "No models support image-to-image for the selected image"
-                      : "No models available"}
+                      ? "Nenhum modelo suporta imagem-para-imagem para a imagem selecionada"
+                      : "Nenhum modelo disponível"}
                   </span>
                 </div>
               ) : (
