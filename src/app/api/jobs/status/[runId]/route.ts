@@ -24,15 +24,17 @@ const toErrorResponse = (error: unknown, status = 500) =>
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { runId?: string } },
+  { params }: { params: Promise<{ runId?: string }> },
 ) {
-  if (!params?.runId) {
+  const { runId } = await params;
+
+  if (!runId) {
     return toErrorResponse(new Error("Missing runId"), 400);
   }
 
   try {
     const response = await uniteGenFetch(
-      `${unitePaths.statusPath.replace(/\/$/, "")}/${encodeURIComponent(params.runId)}`,
+      `${unitePaths.statusPath.replace(/\/$/, "")}/${encodeURIComponent(runId)}`,
       {
         method: "GET",
       },

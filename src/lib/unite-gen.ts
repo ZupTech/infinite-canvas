@@ -41,7 +41,7 @@ export const uniteGenFetch = async (path: string, init: FetchOptions = {}) => {
   const url = buildUrl(path);
   const sessionToken = getUniteGenSessionToken();
   const headersInit = new Headers(init.headers);
-  const incomingHeaders = headers();
+  const incomingHeaders = await headers();
 
   if (init.body && !headersInit.has("content-type")) {
     headersInit.set("content-type", "application/json");
