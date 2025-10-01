@@ -283,9 +283,10 @@ export default function OverlayPage() {
   const [isTouchingImage, setIsTouchingImage] = useState(false);
 
   // Canvas navigation hook
-  const { isPanMode, togglePanMode, fitToScreen } = useCanvasNavigation({
-    canvasSize,
-  });
+  const { isPanMode, setPanMode, togglePanMode, fitToScreen } =
+    useCanvasNavigation({
+      canvasSize,
+    });
 
   // Track when generation completes
   const [previousGenerationCount, setPreviousGenerationCount] = useState(0);
@@ -1998,6 +1999,11 @@ export default function OverlayPage() {
     setIsTouchingImage(false);
   };
 
+  // Memoized fit to screen callback to prevent unnecessary re-renders
+  const handleFitToScreen = useCallback(() => {
+    fitToScreen([...images, ...videos], setViewport);
+  }, [images, videos, fitToScreen, setViewport]);
+
   // Handle selection
   const handleSelect = (id: string, e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey) {
@@ -3224,10 +3230,10 @@ export default function OverlayPage() {
       const isInputElement =
         e.target && (e.target as HTMLElement).matches("input, textarea");
 
-      // Toggle pan mode with Space key
+      // Enable pan mode with Space key (hold-to-pan)
       if (e.key === " " && !isInputElement) {
         e.preventDefault();
-        togglePanMode();
+        setPanMode(true);
       }
       // Undo/Redo
       else if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
@@ -3342,7 +3348,10 @@ export default function OverlayPage() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Currently no key up handlers needed
+      // Disable pan mode when Space key is released
+      if (e.key === " ") {
+        setPanMode(false);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -3361,7 +3370,7 @@ export default function OverlayPage() {
     handleDuplicate,
     handleRun,
     croppingImageId,
-    togglePanMode,
+    setPanMode,
     viewport,
     canvasSize,
     sendToFront,
@@ -4383,9 +4392,7 @@ export default function OverlayPage() {
             canvasSize={canvasSize}
             isPanMode={isPanMode}
             onTogglePanMode={togglePanMode}
-            onFitToScreen={() =>
-              fitToScreen([...images, ...videos], setViewport)
-            }
+            onFitToScreen={handleFitToScreen}
           />
 
           <PoweredByUniteBadge />
