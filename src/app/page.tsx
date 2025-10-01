@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiImageGeneration } from "@/hooks/useMultiImageGeneration";
+import { useCanvasNavigation } from "@/hooks/useCanvasNavigation";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
@@ -217,7 +218,6 @@ export default function OverlayPage() {
   });
   const [isCanvasReady, setIsCanvasReady] = useState(false);
   const [isPanningCanvas, setIsPanningCanvas] = useState(false);
-  const [isPanMode, setIsPanMode] = useState(false);
   const [lastPanPosition, setLastPanPosition] = useState({ x: 0, y: 0 });
   const [croppingImageId, setCroppingImageId] = useState<string | null>(null);
   const [viewport, setViewport] = useState({
@@ -281,6 +281,11 @@ export default function OverlayPage() {
     y: number;
   } | null>(null);
   const [isTouchingImage, setIsTouchingImage] = useState(false);
+
+  // Canvas navigation hook
+  const { isPanMode, togglePanMode, fitToScreen } = useCanvasNavigation({
+    canvasSize,
+  });
 
   // Track when generation completes
   const [previousGenerationCount, setPreviousGenerationCount] = useState(0);
@@ -1992,66 +1997,6 @@ export default function OverlayPage() {
     setLastTouchCenter(null);
     setIsTouchingImage(false);
   };
-
-  // Toggle pan mode
-  const togglePanMode = useCallback(() => {
-    setIsPanMode((prev) => !prev);
-  }, []);
-
-  // Fit all elements to screen
-  const fitToScreen = useCallback(() => {
-    const allElements = [...images, ...videos];
-
-    if (allElements.length === 0) {
-      // If no elements, just reset to center
-      setViewport({ x: 0, y: 0, scale: 1 });
-      return;
-    }
-
-    // Calculate bounding box of all elements
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-
-    allElements.forEach((element) => {
-      const left = element.x;
-      const top = element.y;
-      const right = element.x + element.width;
-      const bottom = element.y + element.height;
-
-      minX = Math.min(minX, left);
-      minY = Math.min(minY, top);
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, bottom);
-    });
-
-    // Add some padding (10% of the content size)
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
-    const padding = Math.max(contentWidth, contentHeight) * 0.1;
-
-    minX -= padding;
-    minY -= padding;
-    maxX += padding;
-    maxY += padding;
-
-    // Calculate the scale to fit the content
-    const scaleX = canvasSize.width / (maxX - minX);
-    const scaleY = canvasSize.height / (maxY - minY);
-    const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100%
-
-    // Calculate the center position
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-
-    // Set viewport to center the content
-    setViewport({
-      x: canvasSize.width / 2 - centerX * scale,
-      y: canvasSize.height / 2 - centerY * scale,
-      scale,
-    });
-  }, [images, videos, canvasSize]);
 
   // Handle selection
   const handleSelect = (id: string, e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -4438,7 +4383,9 @@ export default function OverlayPage() {
             canvasSize={canvasSize}
             isPanMode={isPanMode}
             onTogglePanMode={togglePanMode}
-            onFitToScreen={fitToScreen}
+            onFitToScreen={() =>
+              fitToScreen([...images, ...videos], setViewport)
+            }
           />
 
           <PoweredByUniteBadge />
