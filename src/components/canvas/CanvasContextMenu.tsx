@@ -35,12 +35,13 @@ import type {
   PlacedVideo,
   GenerationSettings,
 } from "@/types/canvas";
+import { MAX_CONCURRENT_GENERATIONS } from "@/utils/constants";
 
 interface CanvasContextMenuProps {
   selectedIds: string[];
   images: PlacedImage[];
   videos?: PlacedVideo[];
-  isGenerating: boolean;
+  activeGenerationsSize: number;
   generationSettings: GenerationSettings;
   isolateInputValue: string;
   isIsolating: boolean;
@@ -67,7 +68,7 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
   selectedIds,
   images,
   videos = [], // Provide a default empty array
-  isGenerating,
+  activeGenerationsSize,
   generationSettings,
   isolateInputValue,
   isIsolating,
@@ -93,15 +94,14 @@ export const CanvasContextMenu: React.FC<CanvasContextMenuProps> = ({
     <ContextMenuContent>
       <ContextMenuItem
         onClick={handleRun}
-        disabled={isGenerating || !generationSettings.prompt.trim()}
+        disabled={
+          activeGenerationsSize >= MAX_CONCURRENT_GENERATIONS ||
+          !generationSettings.prompt.trim()
+        }
         className="flex items-center justify-between gap-2"
       >
         <div className="flex items-center gap-2">
-          {isGenerating ? (
-            <SpinnerIcon className="h-4 w-4 animate-spin text-content" />
-          ) : (
-            <Play className="h-4 w-4 text-content" />
-          )}
+          <Play className="h-4 w-4 text-content" />
           <span>Executar</span>
         </div>
         <ShortcutBadge

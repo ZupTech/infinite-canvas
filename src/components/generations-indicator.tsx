@@ -22,7 +22,7 @@ export function GenerationsIndicator({
   const [currentFrame, setCurrentFrame] = useState(0);
 
   // Determine the fill color based on output type
-  const fillColor = outputType === "video" ? "#A855F7" : "#EC0648"; // purple for video, red for image
+  const fillColor = outputType === "video" ? "#A855F7" : "#5701da"; // purple for video, purple for image
 
   const svgFrames = [
     <motion.svg
@@ -65,8 +65,8 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="5" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="5" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="5"
         y="15"
@@ -75,8 +75,8 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="10" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect x="15" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="10" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect x="15" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="10"
         y="15"
@@ -217,8 +217,8 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="5" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="5" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="5"
         y="15"
@@ -227,8 +227,8 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="10" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect x="15" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="10" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect x="15" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="10"
         y="15"
@@ -333,8 +333,8 @@ export function GenerationsIndicator({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="5" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="5" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="5"
         y="15"
@@ -343,8 +343,8 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="10" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect x="15" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
+      <rect x="10" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect x="15" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
       <rect
         x="10"
         y="15"
@@ -438,10 +438,10 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="3" y="3" width="3" height="3" fill="#EC0648" />
-      <rect x="3" y="13" width="3" height="3" fill="#EC0648" />
-      <rect x="13" y="13" width="3" height="3" fill="#EC0648" />
-      <rect x="13" y="3" width="3" height="3" fill="#EC0648" />
+      <rect x="3" y="3" width="3" height="3" fill="#5701da" />
+      <rect x="3" y="13" width="3" height="3" fill="#5701da" />
+      <rect x="13" y="13" width="3" height="3" fill="#5701da" />
+      <rect x="13" y="3" width="3" height="3" fill="#5701da" />
     </motion.svg>,
 
     // Frame 4
@@ -453,12 +453,12 @@ export function GenerationsIndicator({
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="5" width="4" height="4" fill="#EC0648" />
-      <rect width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect x="5" y="15" width="4" height="4" fill="#EC0648" />
-      <rect x="10" width="4" height="4" fill="#EC0648" />
-      <rect x="15" width="4" height="4" fill="#EC0648" fillOpacity="0.08" />
-      <rect x="10" y="15" width="4" height="4" fill="#EC0648" />
+      <rect x="5" width="4" height="4" fill="#5701da" />
+      <rect width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect x="5" y="15" width="4" height="4" fill="#5701da" />
+      <rect x="10" width="4" height="4" fill="#5701da" />
+      <rect x="15" width="4" height="4" fill="#5701da" fillOpacity="0.08" />
+      <rect x="10" y="15" width="4" height="4" fill="#5701da" />
       <rect
         x="15"
         y="15"
@@ -544,10 +544,10 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="3" y="3" width="3" height="3" fill="#EC0648" />
-      <rect x="3" y="13" width="3" height="3" fill="#EC0648" />
-      <rect x="13" y="13" width="3" height="3" fill="#EC0648" />
-      <rect x="13" y="3" width="3" height="3" fill="#EC0648" />
+      <rect x="3" y="3" width="3" height="3" fill="#5701da" />
+      <rect x="3" y="13" width="3" height="3" fill="#5701da" />
+      <rect x="13" y="13" width="3" height="3" fill="#5701da" />
+      <rect x="13" y="3" width="3" height="3" fill="#5701da" />
     </motion.svg>,
 
     // Frame 5
@@ -591,13 +591,13 @@ export function GenerationsIndicator({
         fill={fillColor}
         fillOpacity="0.08"
       />
-      <rect x="5" width="4" height="4" fill="#EC0648" />
-      <rect width="4" height="4" fill="#EC0648" />
-      <rect x="5" y="15" width="4" height="4" fill="#EC0648" />
-      <rect x="10" width="4" height="4" fill="#EC0648" />
-      <rect x="15" width="4" height="4" fill="#EC0648" />
-      <rect x="10" y="15" width="4" height="4" fill="#EC0648" />
-      <rect x="15" y="15" width="4" height="4" fill="#EC0648" />
+      <rect x="5" width="4" height="4" fill="#5701da" />
+      <rect width="4" height="4" fill="#5701da" />
+      <rect x="5" y="15" width="4" height="4" fill="#5701da" />
+      <rect x="10" width="4" height="4" fill="#5701da" />
+      <rect x="15" width="4" height="4" fill="#5701da" />
+      <rect x="10" y="15" width="4" height="4" fill="#5701da" />
+      <rect x="15" y="15" width="4" height="4" fill="#5701da" />
       <rect
         x="19"
         y="5"
@@ -695,7 +695,7 @@ export function GenerationsIndicator({
           ? "bg-green-500/10 dark:bg-green-500/15 text-green-600 dark:text-green-500"
           : outputType === "video"
             ? "bg-purple-500/10 dark:bg-purple-500/15 text-purple-600 dark:text-purple-500"
-            : "bg-[#EC0648]/10 dark:bg-[#EC0648]/15 text-[#EC0648] dark:text-[#EC0648]",
+            : "bg-[#5701da]/10 dark:bg-[#5701da]/15 text-[#5701da] dark:text-[#5701da]",
       )}
     >
       {isSuccess ? (
@@ -715,7 +715,7 @@ export function GenerationsIndicator({
               strokeLinejoin="round"
             />
           </svg>
-          <span className="font-medium">Done</span>
+          <span className="font-medium">Concluído</span>
         </>
       ) : (
         <>
@@ -723,8 +723,14 @@ export function GenerationsIndicator({
             {svgFrames[currentFrame]}
           </AnimatePresence>
           <span className="font-medium">
-            Generating {activeGenerationsSize} {outputType}
-            {activeGenerationsSize && activeGenerationsSize > 1 ? "s" : ""}
+            Gerando {activeGenerationsSize}{" "}
+            {outputType === "image"
+              ? activeGenerationsSize && activeGenerationsSize > 1
+                ? "imagens"
+                : "imagem"
+              : activeGenerationsSize && activeGenerationsSize > 1
+                ? "vídeos"
+                : "vídeo"}
           </span>
         </>
       )}

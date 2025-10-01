@@ -6,6 +6,7 @@ import {
   filterModelParameters,
   type MediaModel,
 } from "@/utils/model-utils";
+import { isPlaceholder } from "@/utils/placeholder-utils";
 
 interface UseImageToImageParams {
   images: PlacedImage[];
@@ -32,13 +33,17 @@ export function useImageToImage({
   images,
   selectedIds,
 }: UseImageToImageParams): ImageToImageConfig {
-  // Check if there are selected images
-  const hasSelectedImages = selectedIds.length > 0;
-
   // Get the first selected image (for now, we support single image input)
-  const selectedImage = hasSelectedImages
-    ? images.find((img) => selectedIds.includes(img.id)) || null
-    : null;
+  // Ignore placeholders - they don't count as valid images for image-to-image
+  const selectedImage =
+    selectedIds.length > 0
+      ? images.find(
+          (img) => selectedIds.includes(img.id) && !isPlaceholder(img.src),
+        ) || null
+      : null;
+
+  // Only consider it as having selected images if we found a valid (non-placeholder) image
+  const hasSelectedImages = selectedImage !== null;
 
   /**
    * Prepare parameters for image-to-image generation
