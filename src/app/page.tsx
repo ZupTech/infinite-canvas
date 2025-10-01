@@ -3602,13 +3602,57 @@ export default function OverlayPage() {
                             onDoubleClick={() => {
                               setCroppingImageId(image.id);
                             }}
-                            onDragStart={() => {
+                            onDragStart={(e) => {
+                              // Check if Alt/Option key is pressed for duplicate-on-drag
+                              const isAltPressed = e.evt?.altKey || false;
+
                               // If dragging a selected item in a multi-selection, keep the selection
                               // If dragging an unselected item, select only that item
                               let currentSelectedIds = selectedIds;
                               if (!selectedIds.includes(image.id)) {
                                 currentSelectedIds = [image.id];
                                 setSelectedIds(currentSelectedIds);
+                              }
+
+                              // If Alt is pressed, duplicate the selected items
+                              if (isAltPressed) {
+                                // Duplicate selected images
+                                const selectedImages = images.filter((img) =>
+                                  currentSelectedIds.includes(img.id),
+                                );
+                                const newImages = selectedImages.map((img) => ({
+                                  ...img,
+                                  id: `img-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: img.x,
+                                  y: img.y,
+                                }));
+
+                                // Duplicate selected videos
+                                const selectedVideos = videos.filter((vid) =>
+                                  currentSelectedIds.includes(vid.id),
+                                );
+                                const newVideos = selectedVideos.map((vid) => ({
+                                  ...vid,
+                                  id: `vid-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: vid.x,
+                                  y: vid.y,
+                                  currentTime: 0,
+                                  isPlaying: false,
+                                }));
+
+                                // Update arrays with duplicated items
+                                setImages((prev) => [...prev, ...newImages]);
+                                setVideos((prev) => [...prev, ...newVideos]);
+
+                                // Select the new duplicated items
+                                const newIds = [
+                                  ...newImages.map((img) => img.id),
+                                  ...newVideos.map((vid) => vid.id),
+                                ];
+                                currentSelectedIds = newIds;
+                                setSelectedIds(newIds);
                               }
 
                               setIsDraggingImage(true);
@@ -3619,8 +3663,13 @@ export default function OverlayPage() {
                               >();
                               currentSelectedIds.forEach((id) => {
                                 const img = images.find((i) => i.id === id);
-                                if (img) {
-                                  positions.set(id, { x: img.x, y: img.y });
+                                const vid = videos.find((v) => v.id === id);
+                                const element = img || vid;
+                                if (element) {
+                                  positions.set(id, {
+                                    x: element.x,
+                                    y: element.y,
+                                  });
                                 }
                               });
                               setDragStartPositions(positions);
@@ -3678,7 +3727,10 @@ export default function OverlayPage() {
                                 ),
                               );
                             }}
-                            onDragStart={() => {
+                            onDragStart={(e) => {
+                              // Check if Alt/Option key is pressed for duplicate-on-drag
+                              const isAltPressed = e.evt?.altKey || false;
+
                               // If dragging a selected item in a multi-selection, keep the selection
                               // If dragging an unselected item, select only that item
                               let currentSelectedIds = selectedIds;
@@ -3687,10 +3739,57 @@ export default function OverlayPage() {
                                 setSelectedIds(currentSelectedIds);
                               }
 
+                              // If Alt is pressed, duplicate the selected items
+                              if (isAltPressed) {
+                                // Duplicate selected images
+                                const selectedImages = images.filter((img) =>
+                                  currentSelectedIds.includes(img.id),
+                                );
+                                const newImages = selectedImages.map((img) => ({
+                                  ...img,
+                                  id: `img-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: img.x,
+                                  y: img.y,
+                                }));
+
+                                // Duplicate selected videos
+                                const selectedVideos = videos.filter((vid) =>
+                                  currentSelectedIds.includes(vid.id),
+                                );
+                                const newVideos = selectedVideos.map((vid) => ({
+                                  ...vid,
+                                  id: `vid-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: vid.x,
+                                  y: vid.y,
+                                  currentTime: 0,
+                                  isPlaying: false,
+                                }));
+
+                                // Update arrays with duplicated items
+                                setImages((prev) => [...prev, ...newImages]);
+                                setVideos((prev) => [...prev, ...newVideos]);
+
+                                // Select the new duplicated items
+                                const newIds = [
+                                  ...newImages.map((img) => img.id),
+                                  ...newVideos.map((vid) => vid.id),
+                                ];
+                                currentSelectedIds = newIds;
+                                setSelectedIds(newIds);
+                              }
+
                               setIsDraggingImage(true);
                               // Hide video controls during drag
                               setHiddenVideoControlsIds(
-                                (prev) => new Set([...prev, video.id]),
+                                (prev) =>
+                                  new Set([
+                                    ...prev,
+                                    ...currentSelectedIds.filter((id) =>
+                                      videos.some((v) => v.id === id),
+                                    ),
+                                  ]),
                               );
                               // Save positions of all selected items
                               const positions = new Map<
@@ -3698,9 +3797,14 @@ export default function OverlayPage() {
                                 { x: number; y: number }
                               >();
                               currentSelectedIds.forEach((id) => {
+                                const img = images.find((i) => i.id === id);
                                 const vid = videos.find((v) => v.id === id);
-                                if (vid) {
-                                  positions.set(id, { x: vid.x, y: vid.y });
+                                const element = img || vid;
+                                if (element) {
+                                  positions.set(id, {
+                                    x: element.x,
+                                    y: element.y,
+                                  });
                                 }
                               });
                               setDragStartPositions(positions);
