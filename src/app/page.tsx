@@ -17,7 +17,6 @@ import {
   X,
   ChevronDown,
   Check,
-  Plus,
   ImageIcon,
   Trash2,
   Undo,
@@ -28,7 +27,6 @@ import {
   MonitorIcon,
   SunIcon,
   MoonIcon,
-  ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -1352,7 +1350,8 @@ export default function OverlayPage() {
             ...model,
             type: (model.type ?? "").toString().toLowerCase(),
           }))
-          .filter((model) => model.visible && isDisplayableType(model.type));
+          .filter((model) => model.visible && isDisplayableType(model.type))
+          .filter((model) => !["cacilds", "black-princess"].includes(model.id));
 
         if (!isMounted) {
           return;
@@ -1365,7 +1364,7 @@ export default function OverlayPage() {
             visibleModels.find((model) => model.featured) || visibleModels[0];
 
           setGenerationSettings((prev) => {
-            if (prev.styleId && prev.styleId !== "custom") {
+            if (prev.styleId) {
               return prev;
             }
 
@@ -1401,10 +1400,7 @@ export default function OverlayPage() {
   }, [setGenerationSettings]);
 
   const selectedMediaModel = useMemo(() => {
-    if (
-      !generationSettings.styleId ||
-      generationSettings.styleId === "custom"
-    ) {
+    if (!generationSettings.styleId) {
       return null;
     }
 
@@ -1422,14 +1418,10 @@ export default function OverlayPage() {
     return mediaModels[0] ?? null;
   }, [selectedMediaModel, mediaModels]);
 
-  // Track previous model when changing models (but not when reverting from custom)
+  // Track previous model when changing models
   useEffect(() => {
     const currentModelId = generationSettings.styleId;
-    if (
-      currentModelId &&
-      currentModelId !== "custom" &&
-      currentModelId !== previousModelId
-    ) {
+    if (currentModelId && currentModelId !== previousModelId) {
       setPreviousModelId(currentModelId);
     }
   }, [generationSettings.styleId, previousModelId]);
@@ -2178,16 +2170,10 @@ export default function OverlayPage() {
       return;
     }
 
-    // Prefer explicitly selected model, otherwise fall back to previously selected/display model
+    // Prefer explicitly selected model, otherwise fall back to display model
     const resolvedModelId = (() => {
-      if (
-        generationSettings.styleId &&
-        generationSettings.styleId !== "custom"
-      ) {
+      if (generationSettings.styleId) {
         return generationSettings.styleId;
-      }
-      if (generationSettings.styleId === "custom" && previousModelId) {
-        return previousModelId;
       }
       return displayMediaModel?.id;
     })();
@@ -2267,7 +2253,7 @@ export default function OverlayPage() {
       parameters.loraUrl = generationSettings.loraUrl;
     }
 
-    if (generationSettings.styleId && generationSettings.styleId !== "custom") {
+    if (generationSettings.styleId) {
       parameters.styleId = generationSettings.styleId;
     }
     // Include model parameters
@@ -4128,59 +4114,6 @@ export default function OverlayPage() {
                   )}
                 </div>
 
-                {generationSettings.styleId === "custom" && (
-                  <div className="w-full flex items-center gap-2">
-                    <Input
-                      value={generationSettings.loraUrl}
-                      onChange={(e) =>
-                        setGenerationSettings({
-                          ...generationSettings,
-                          loraUrl: e.target.value,
-                        })
-                      }
-                      placeholder="URL do Kontext LoRA (opcional)"
-                      style={{ fontSize: "16px" }}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="flex items-center gap-2"
-                      onClick={() => {
-                        window.open(
-                          "https://huggingface.co/collections/kontext-community/flux-kontext-loras-687e8779f8ed40a611a3925f",
-                          "_blank",
-                        );
-                      }}
-                      title="Navegar pelos Kontext LoRAs"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
-                    {generationSettings.styleId === "custom" && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="flex items-center gap-2"
-                        onClick={() => {
-                          // Find the previous model to restore its settings
-                          const prevModel = mediaModels.find(
-                            (model) => model.id === previousModelId,
-                          );
-
-                          if (prevModel) {
-                            setGenerationSettings((prev) => ({
-                              ...prev,
-                              styleId: prevModel.id,
-                              loraUrl: "",
-                            }));
-                          }
-                        }}
-                        title="Voltar ao estilo anterior"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                )}
                 {/* Style dropdown and Run button */}
                 <div className="flex items-center justify-between">
                   {/* Style selector button */}
@@ -4190,16 +4123,6 @@ export default function OverlayPage() {
                     onClick={() => setIsModelDialogOpen(true)}
                   >
                     {(() => {
-                      if (generationSettings.styleId === "custom") {
-                        return (
-                          <>
-                            <div className="w-5 h-5 flex items-center justify-center">
-                              <Plus className="w-4 h-4" />
-                            </div>
-                            <span className="text-sm">Custom</span>
-                          </>
-                        );
-                      }
                       if (isModelsLoading) {
                         return (
                           <>
@@ -4471,15 +4394,6 @@ export default function OverlayPage() {
             ...prev,
             loraUrl: "",
             styleId: modelId,
-          }));
-          setIsModelDialogOpen(false);
-        }}
-        onCustomSelect={() => {
-          setGenerationSettings((prev) => ({
-            ...prev,
-            loraUrl: "",
-            prompt: "",
-            styleId: "custom",
           }));
           setIsModelDialogOpen(false);
         }}
