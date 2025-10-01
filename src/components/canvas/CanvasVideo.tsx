@@ -21,7 +21,7 @@ interface CanvasVideoProps {
   isSelected: boolean;
   onSelect: (e: any) => void;
   onChange: (newAttrs: Partial<PlacedVideo>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: () => void;
   onDoubleClick?: () => void;
   selectedIds: string[];
@@ -395,7 +395,7 @@ export const CanvasVideo: React.FC<CanvasVideoProps> = ({
           if (onResizeStart) {
             onResizeStart();
           }
-          onDragStart();
+          onDragStart(e);
         }}
         onDragMove={handleDragMove}
         onDragEnd={() => {

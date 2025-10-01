@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useMultiImageGeneration } from "@/hooks/useMultiImageGeneration";
+import { useCanvasNavigation } from "@/hooks/useCanvasNavigation";
 
 // Import extracted components
 import { ShortcutBadge } from "@/components/canvas/ShortcutBadge";
@@ -280,6 +281,12 @@ export default function OverlayPage() {
     y: number;
   } | null>(null);
   const [isTouchingImage, setIsTouchingImage] = useState(false);
+
+  // Canvas navigation hook
+  const { isPanMode, setPanMode, togglePanMode, fitToScreen } =
+    useCanvasNavigation({
+      canvasSize,
+    });
 
   // Track when generation completes
   const [previousGenerationCount, setPreviousGenerationCount] = useState(0);
@@ -1992,6 +1999,11 @@ export default function OverlayPage() {
     setIsTouchingImage(false);
   };
 
+  // Memoized fit to screen callback to prevent unnecessary re-renders
+  const handleFitToScreen = useCallback(() => {
+    fitToScreen([...images, ...videos], setViewport);
+  }, [images, videos, fitToScreen, setViewport]);
+
   // Handle selection
   const handleSelect = (id: string, e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey) {
@@ -2009,8 +2021,8 @@ export default function OverlayPage() {
     const stage = e.target.getStage();
     const mouseButton = e.evt.button; // 0 = left, 1 = middle, 2 = right
 
-    // If middle mouse button, start panning
-    if (mouseButton === 1) {
+    // If middle mouse button OR pan mode with left click, start panning
+    if (mouseButton === 1 || (isPanMode && mouseButton === 0)) {
       e.evt.preventDefault();
       setIsPanningCanvas(true);
       setLastPanPosition({ x: e.evt.clientX, y: e.evt.clientY });
@@ -2030,8 +2042,8 @@ export default function OverlayPage() {
       }
     }
 
-    // Start selection box when left-clicking on empty space
-    if (clickedOnEmpty && !croppingImageId && mouseButton === 0) {
+    // Start selection box when left-clicking on empty space (but not in pan mode)
+    if (clickedOnEmpty && !croppingImageId && mouseButton === 0 && !isPanMode) {
       const pos = stage?.getPointerPosition();
       if (pos) {
         // Convert screen coordinates to canvas coordinates
@@ -3218,8 +3230,13 @@ export default function OverlayPage() {
       const isInputElement =
         e.target && (e.target as HTMLElement).matches("input, textarea");
 
+      // Enable pan mode with Space key (hold-to-pan)
+      if (e.key === " " && !isInputElement) {
+        e.preventDefault();
+        setPanMode(true);
+      }
       // Undo/Redo
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+      else if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
       } else if (
@@ -3331,7 +3348,10 @@ export default function OverlayPage() {
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      // Currently no key up handlers needed
+      // Disable pan mode when Space key is released
+      if (e.key === " ") {
+        setPanMode(false);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -3350,6 +3370,7 @@ export default function OverlayPage() {
     handleDuplicate,
     handleRun,
     croppingImageId,
+    setPanMode,
     viewport,
     canvasSize,
     sendToFront,
@@ -3426,7 +3447,11 @@ export default function OverlayPage() {
                   width: `${canvasSize.width}px`,
                   minHeight: `${canvasSize.height}px`,
                   minWidth: `${canvasSize.width}px`,
-                  cursor: isPanningCanvas ? "grabbing" : "default",
+                  cursor: isPanningCanvas
+                    ? "grabbing"
+                    : isPanMode
+                      ? "grab"
+                      : "default",
                   WebkitTouchCallout: "none", // Add this for iOS
                   touchAction: "none", // For touch devices
                 }}
@@ -3577,13 +3602,57 @@ export default function OverlayPage() {
                             onDoubleClick={() => {
                               setCroppingImageId(image.id);
                             }}
-                            onDragStart={() => {
+                            onDragStart={(e) => {
+                              // Check if Alt/Option key is pressed for duplicate-on-drag
+                              const isAltPressed = e.evt?.altKey || false;
+
                               // If dragging a selected item in a multi-selection, keep the selection
                               // If dragging an unselected item, select only that item
                               let currentSelectedIds = selectedIds;
                               if (!selectedIds.includes(image.id)) {
                                 currentSelectedIds = [image.id];
                                 setSelectedIds(currentSelectedIds);
+                              }
+
+                              // If Alt is pressed, duplicate the selected items
+                              if (isAltPressed) {
+                                // Duplicate selected images
+                                const selectedImages = images.filter((img) =>
+                                  currentSelectedIds.includes(img.id),
+                                );
+                                const newImages = selectedImages.map((img) => ({
+                                  ...img,
+                                  id: `img-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: img.x,
+                                  y: img.y,
+                                }));
+
+                                // Duplicate selected videos
+                                const selectedVideos = videos.filter((vid) =>
+                                  currentSelectedIds.includes(vid.id),
+                                );
+                                const newVideos = selectedVideos.map((vid) => ({
+                                  ...vid,
+                                  id: `vid-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: vid.x,
+                                  y: vid.y,
+                                  currentTime: 0,
+                                  isPlaying: false,
+                                }));
+
+                                // Update arrays with duplicated items
+                                setImages((prev) => [...prev, ...newImages]);
+                                setVideos((prev) => [...prev, ...newVideos]);
+
+                                // Select the new duplicated items
+                                const newIds = [
+                                  ...newImages.map((img) => img.id),
+                                  ...newVideos.map((vid) => vid.id),
+                                ];
+                                currentSelectedIds = newIds;
+                                setSelectedIds(newIds);
                               }
 
                               setIsDraggingImage(true);
@@ -3594,8 +3663,13 @@ export default function OverlayPage() {
                               >();
                               currentSelectedIds.forEach((id) => {
                                 const img = images.find((i) => i.id === id);
-                                if (img) {
-                                  positions.set(id, { x: img.x, y: img.y });
+                                const vid = videos.find((v) => v.id === id);
+                                const element = img || vid;
+                                if (element) {
+                                  positions.set(id, {
+                                    x: element.x,
+                                    y: element.y,
+                                  });
                                 }
                               });
                               setDragStartPositions(positions);
@@ -3653,7 +3727,10 @@ export default function OverlayPage() {
                                 ),
                               );
                             }}
-                            onDragStart={() => {
+                            onDragStart={(e) => {
+                              // Check if Alt/Option key is pressed for duplicate-on-drag
+                              const isAltPressed = e.evt?.altKey || false;
+
                               // If dragging a selected item in a multi-selection, keep the selection
                               // If dragging an unselected item, select only that item
                               let currentSelectedIds = selectedIds;
@@ -3662,10 +3739,57 @@ export default function OverlayPage() {
                                 setSelectedIds(currentSelectedIds);
                               }
 
+                              // If Alt is pressed, duplicate the selected items
+                              if (isAltPressed) {
+                                // Duplicate selected images
+                                const selectedImages = images.filter((img) =>
+                                  currentSelectedIds.includes(img.id),
+                                );
+                                const newImages = selectedImages.map((img) => ({
+                                  ...img,
+                                  id: `img-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: img.x,
+                                  y: img.y,
+                                }));
+
+                                // Duplicate selected videos
+                                const selectedVideos = videos.filter((vid) =>
+                                  currentSelectedIds.includes(vid.id),
+                                );
+                                const newVideos = selectedVideos.map((vid) => ({
+                                  ...vid,
+                                  id: `vid-${Date.now()}-${Math.random()}`,
+                                  // Keep same position initially, drag will move them
+                                  x: vid.x,
+                                  y: vid.y,
+                                  currentTime: 0,
+                                  isPlaying: false,
+                                }));
+
+                                // Update arrays with duplicated items
+                                setImages((prev) => [...prev, ...newImages]);
+                                setVideos((prev) => [...prev, ...newVideos]);
+
+                                // Select the new duplicated items
+                                const newIds = [
+                                  ...newImages.map((img) => img.id),
+                                  ...newVideos.map((vid) => vid.id),
+                                ];
+                                currentSelectedIds = newIds;
+                                setSelectedIds(newIds);
+                              }
+
                               setIsDraggingImage(true);
                               // Hide video controls during drag
                               setHiddenVideoControlsIds(
-                                (prev) => new Set([...prev, video.id]),
+                                (prev) =>
+                                  new Set([
+                                    ...prev,
+                                    ...currentSelectedIds.filter((id) =>
+                                      videos.some((v) => v.id === id),
+                                    ),
+                                  ]),
                               );
                               // Save positions of all selected items
                               const positions = new Map<
@@ -3673,9 +3797,14 @@ export default function OverlayPage() {
                                 { x: number; y: number }
                               >();
                               currentSelectedIds.forEach((id) => {
+                                const img = images.find((i) => i.id === id);
                                 const vid = videos.find((v) => v.id === id);
-                                if (vid) {
-                                  positions.set(id, { x: vid.x, y: vid.y });
+                                const element = img || vid;
+                                if (element) {
+                                  positions.set(id, {
+                                    x: element.x,
+                                    y: element.y,
+                                  });
                                 }
                               });
                               setDragStartPositions(positions);
@@ -4365,6 +4494,9 @@ export default function OverlayPage() {
             viewport={viewport}
             setViewport={setViewport}
             canvasSize={canvasSize}
+            isPanMode={isPanMode}
+            onTogglePanMode={togglePanMode}
+            onFitToScreen={handleFitToScreen}
           />
 
           <PoweredByUniteBadge />

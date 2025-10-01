@@ -19,7 +19,7 @@ interface CanvasImageProps {
   isSelected: boolean;
   onSelect: (e: Konva.KonvaEventObject<MouseEvent>) => void;
   onChange: (newAttrs: Partial<PlacedImage>) => void;
-  onDragStart: () => void;
+  onDragStart: (e: Konva.KonvaEventObject<DragEvent>) => void;
   onDragEnd: () => void;
   onDoubleClick?: () => void;
   selectedIds: string[];
@@ -131,7 +131,7 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
             if (!isSelected) {
               onSelect(e);
             }
-            onDragStart();
+            onDragStart(e);
           }}
           onDragMove={useMemo(
             () =>
@@ -255,7 +255,7 @@ export const CanvasImage: React.FC<CanvasImageProps> = ({
           if (!isSelected) {
             onSelect(e);
           }
-          onDragStart();
+          onDragStart(e);
         }}
         onDragMove={useMemo(
           () =>
