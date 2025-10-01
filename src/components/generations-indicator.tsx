@@ -725,10 +725,10 @@ export function GenerationsIndicator({
           <span className="font-medium">
             Gerando {activeGenerationsSize}{" "}
             {outputType === "image"
-              ? activeGenerationsSize && activeGenerationsSize > 1
+              ? (activeGenerationsSize ?? 0) > 1
                 ? "imagens"
                 : "imagem"
-              : activeGenerationsSize && activeGenerationsSize > 1
+              : (activeGenerationsSize ?? 0) > 1
                 ? "vídeos"
                 : "vídeo"}
           </span>

@@ -1427,6 +1427,11 @@ export default function OverlayPage() {
     return mediaModels[0] ?? null;
   }, [selectedMediaModel, mediaModels]);
 
+  const displayModelImage = useMemo(() => {
+    const artwork = displayMediaModel?.ui?.image || displayMediaModel?.ui?.icon;
+    return isRenderableMediaUrl(artwork) ? (artwork as string) : undefined;
+  }, [displayMediaModel]);
+
   // Track previous model when changing models
   useEffect(() => {
     const currentModelId = generationSettings.styleId;
@@ -2299,8 +2304,6 @@ export default function OverlayPage() {
                 : img,
             ),
           );
-          // Use the uploaded URL for this generation
-          imageToImage.selectedImage.src = uploadedUrl;
         } catch (error) {
           console.error("Failed to upload image:", error);
           // Clean up placeholders
@@ -4101,14 +4104,7 @@ export default function OverlayPage() {
                   selectedImageSrc={imageToImage.selectedImage?.src}
                   displayModelName={displayMediaModel?.name}
                   displayModelIcon={displayMediaModel?.ui?.icon ?? undefined}
-                  displayModelImage={(() => {
-                    const artwork =
-                      displayMediaModel?.ui?.image ||
-                      displayMediaModel?.ui?.icon;
-                    return isRenderableMediaUrl(artwork)
-                      ? (artwork as string)
-                      : undefined;
-                  })()}
+                  displayModelImage={displayModelImage}
                   selectedModel={selectedMediaModel as any}
                   isModelsLoading={isModelsLoading}
                   modelsError={modelsError}

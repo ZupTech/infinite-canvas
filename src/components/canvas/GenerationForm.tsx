@@ -24,20 +24,7 @@ import { MAX_CONCURRENT_GENERATIONS } from "@/utils/constants";
 import { ModelParametersButton } from "./ModelParametersButton";
 import { ShortcutBadge } from "./ShortcutBadge";
 import type { GenerationSettings } from "@/types/canvas";
-
-// Using the same MediaModel type as ModelParametersButton for compatibility
-interface MediaModel {
-  id: string;
-  name: string;
-  type?: string;
-  visible?: boolean;
-  ui?: {
-    icon?: string | null;
-    image?: string | null;
-  };
-  parameters?: any[];
-  [key: string]: any;
-}
+import type { MediaModel } from "@/utils/model-utils";
 
 interface GenerationFormProps {
   // Settings
