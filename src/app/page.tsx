@@ -217,6 +217,7 @@ export default function OverlayPage() {
   });
   const [isCanvasReady, setIsCanvasReady] = useState(false);
   const [isPanningCanvas, setIsPanningCanvas] = useState(false);
+  const [isPanMode, setIsPanMode] = useState(false);
   const [lastPanPosition, setLastPanPosition] = useState({ x: 0, y: 0 });
   const [croppingImageId, setCroppingImageId] = useState<string | null>(null);
   const [viewport, setViewport] = useState({
@@ -1992,6 +1993,66 @@ export default function OverlayPage() {
     setIsTouchingImage(false);
   };
 
+  // Toggle pan mode
+  const togglePanMode = useCallback(() => {
+    setIsPanMode((prev) => !prev);
+  }, []);
+
+  // Fit all elements to screen
+  const fitToScreen = useCallback(() => {
+    const allElements = [...images, ...videos];
+
+    if (allElements.length === 0) {
+      // If no elements, just reset to center
+      setViewport({ x: 0, y: 0, scale: 1 });
+      return;
+    }
+
+    // Calculate bounding box of all elements
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    allElements.forEach((element) => {
+      const left = element.x;
+      const top = element.y;
+      const right = element.x + element.width;
+      const bottom = element.y + element.height;
+
+      minX = Math.min(minX, left);
+      minY = Math.min(minY, top);
+      maxX = Math.max(maxX, right);
+      maxY = Math.max(maxY, bottom);
+    });
+
+    // Add some padding (10% of the content size)
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    const padding = Math.max(contentWidth, contentHeight) * 0.1;
+
+    minX -= padding;
+    minY -= padding;
+    maxX += padding;
+    maxY += padding;
+
+    // Calculate the scale to fit the content
+    const scaleX = canvasSize.width / (maxX - minX);
+    const scaleY = canvasSize.height / (maxY - minY);
+    const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100%
+
+    // Calculate the center position
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+
+    // Set viewport to center the content
+    setViewport({
+      x: canvasSize.width / 2 - centerX * scale,
+      y: canvasSize.height / 2 - centerY * scale,
+      scale,
+    });
+  }, [images, videos, canvasSize]);
+
   // Handle selection
   const handleSelect = (id: string, e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.evt.shiftKey || e.evt.metaKey || e.evt.ctrlKey) {
@@ -2009,8 +2070,8 @@ export default function OverlayPage() {
     const stage = e.target.getStage();
     const mouseButton = e.evt.button; // 0 = left, 1 = middle, 2 = right
 
-    // If middle mouse button, start panning
-    if (mouseButton === 1) {
+    // If middle mouse button OR pan mode with left click, start panning
+    if (mouseButton === 1 || (isPanMode && mouseButton === 0)) {
       e.evt.preventDefault();
       setIsPanningCanvas(true);
       setLastPanPosition({ x: e.evt.clientX, y: e.evt.clientY });
@@ -2030,8 +2091,8 @@ export default function OverlayPage() {
       }
     }
 
-    // Start selection box when left-clicking on empty space
-    if (clickedOnEmpty && !croppingImageId && mouseButton === 0) {
+    // Start selection box when left-clicking on empty space (but not in pan mode)
+    if (clickedOnEmpty && !croppingImageId && mouseButton === 0 && !isPanMode) {
       const pos = stage?.getPointerPosition();
       if (pos) {
         // Convert screen coordinates to canvas coordinates
@@ -3218,8 +3279,13 @@ export default function OverlayPage() {
       const isInputElement =
         e.target && (e.target as HTMLElement).matches("input, textarea");
 
+      // Toggle pan mode with Space key
+      if (e.key === " " && !isInputElement) {
+        e.preventDefault();
+        togglePanMode();
+      }
       // Undo/Redo
-      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+      else if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         undo();
       } else if (
@@ -3350,6 +3416,7 @@ export default function OverlayPage() {
     handleDuplicate,
     handleRun,
     croppingImageId,
+    togglePanMode,
     viewport,
     canvasSize,
     sendToFront,
@@ -3426,7 +3493,11 @@ export default function OverlayPage() {
                   width: `${canvasSize.width}px`,
                   minHeight: `${canvasSize.height}px`,
                   minWidth: `${canvasSize.width}px`,
-                  cursor: isPanningCanvas ? "grabbing" : "default",
+                  cursor: isPanningCanvas
+                    ? "grabbing"
+                    : isPanMode
+                      ? "grab"
+                      : "default",
                   WebkitTouchCallout: "none", // Add this for iOS
                   touchAction: "none", // For touch devices
                 }}
@@ -4365,6 +4436,9 @@ export default function OverlayPage() {
             viewport={viewport}
             setViewport={setViewport}
             canvasSize={canvasSize}
+            isPanMode={isPanMode}
+            onTogglePanMode={togglePanMode}
+            onFitToScreen={fitToScreen}
           />
 
           <PoweredByUniteBadge />
