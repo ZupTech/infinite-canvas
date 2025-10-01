@@ -100,6 +100,7 @@ import { DimensionDisplay } from "@/components/canvas/DimensionDisplay";
 import { ModelDetailsDialog } from "@/components/canvas/ModelDetailsDialog";
 import { ModelParametersButton } from "@/components/canvas/ModelParametersButton";
 import { ModelSelectionDialog } from "@/components/canvas/ModelSelectionDialog";
+import { GenerationForm } from "@/components/canvas/GenerationForm";
 
 // Import handlers
 import { handleRemoveBackground as handleRemoveBackgroundHandler } from "@/lib/handlers/background-handler";
@@ -127,6 +128,7 @@ import {
   type MediaModel as UniteMediaModel,
 } from "@/utils/model-utils";
 import { getVideoModelById } from "@/lib/video-models";
+import { MAX_CONCURRENT_GENERATIONS } from "@/utils/constants";
 
 type MediaModelType = "image" | "video" | "upscale" | "audio" | "text";
 
@@ -1425,6 +1427,11 @@ export default function OverlayPage() {
     return mediaModels[0] ?? null;
   }, [selectedMediaModel, mediaModels]);
 
+  const displayModelImage = useMemo(() => {
+    const artwork = displayMediaModel?.ui?.image || displayMediaModel?.ui?.icon;
+    return isRenderableMediaUrl(artwork) ? (artwork as string) : undefined;
+  }, [displayMediaModel]);
+
   // Track previous model when changing models
   useEffect(() => {
     const currentModelId = generationSettings.styleId;
@@ -2214,8 +2221,6 @@ export default function OverlayPage() {
       return;
     }
 
-    setIsGenerating(true);
-
     // Get number of images to generate from model parameters, default to 1
     const numImages = Math.max(
       1,
@@ -2278,6 +2283,42 @@ export default function OverlayPage() {
         parameters[key] = modelParameters[key];
       }
     });
+
+    // Pre-upload selected image if using image-to-image to avoid concurrent upload conflicts
+    if (imageToImage.hasSelectedImages && imageToImage.selectedImage) {
+      const imageUrl =
+        imageToImage.selectedImage.uploadedUrl ||
+        imageToImage.selectedImage.src;
+      // Only upload if it's not already an HTTP URL
+      if (!/^https?:\/\//i.test(imageUrl)) {
+        try {
+          const { url: uploadedUrl } = await ensureRemoteAsset(imageUrl, {
+            filename: `${imageToImage.selectedImage.id}.png`,
+            existingUrl: imageToImage.selectedImage.uploadedUrl ?? null,
+          });
+          // Update the image with the uploaded URL to prevent future uploads
+          setImages((prev) =>
+            prev.map((img) =>
+              img.id === imageToImage.selectedImage!.id
+                ? { ...img, uploadedUrl: uploadedUrl }
+                : img,
+            ),
+          );
+        } catch (error) {
+          console.error("Failed to upload image:", error);
+          // Clean up placeholders
+          setImages((prev) =>
+            prev.filter((img) => !placeholderIds.includes(img.id)),
+          );
+          toast({
+            title: "Falha no upload",
+            description: "Não foi possível fazer upload da imagem selecionada",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+    }
 
     // Prepare parameters for image-to-image if applicable
     const { parameters: finalParameters, endpoint } =
@@ -2448,7 +2489,6 @@ export default function OverlayPage() {
           placeholderIds.forEach((id) => next.delete(id));
           return next;
         });
-        setIsGenerating(false);
         setTimeout(() => saveToStorage(), 100);
       } else if (!runId) {
         throw new Error(
@@ -2477,7 +2517,6 @@ export default function OverlayPage() {
         placeholderIds.forEach((id) => next.delete(id));
         return next;
       });
-      setIsGenerating(false);
 
       toast({
         title: "Falha na geração",
@@ -2503,7 +2542,6 @@ export default function OverlayPage() {
     setActiveGenerations,
     setImages,
     setSelectedIds,
-    setIsGenerating,
     toast,
     viewport.x,
     viewport.y,
@@ -3275,7 +3313,10 @@ export default function OverlayPage() {
         !isInputElement
       ) {
         e.preventDefault();
-        if (!isGenerating && generationSettings.prompt.trim()) {
+        if (
+          activeGenerations.size < MAX_CONCURRENT_GENERATIONS &&
+          generationSettings.prompt.trim()
+        ) {
           handleRun();
         }
       }
@@ -3928,7 +3969,7 @@ export default function OverlayPage() {
               selectedIds={selectedIds}
               images={images}
               videos={videos}
-              isGenerating={isGenerating}
+              activeGenerationsSize={activeGenerations.size}
               generationSettings={generationSettings}
               isolateInputValue={isolateInputValue}
               isIsolating={isIsolating}
@@ -3976,7 +4017,7 @@ export default function OverlayPage() {
             <MobileToolbar
               selectedIds={selectedIds}
               images={images}
-              isGenerating={isGenerating}
+              activeGenerationsSize={activeGenerations.size}
               generationSettings={generationSettings}
               handleRun={handleRun}
               handleDuplicate={handleDuplicate}
@@ -4026,7 +4067,7 @@ export default function OverlayPage() {
                               isExtendingVideo ||
                               isTransformingVideo
                             ? "shadow-[0_0_0_1px_rgba(168,85,247,0.2),0_4px_8px_-0.5px_rgba(168,85,247,0.08),0_8px_16px_-2px_rgba(168,85,247,0.04)] dark:shadow-none dark:border dark:border-purple-500/30"
-                            : "shadow-[0_0_0_1px_rgba(236,6,72,0.2),0_4px_8px_-0.5px_rgba(236,6,72,0.08),0_8px_16px_-2px_rgba(236,6,72,0.04)] dark:shadow-none dark:border dark:border-[#EC0648]/30",
+                            : "shadow-[0_0_0_1px_rgba(87,1,218,0.2),0_4px_8px_-0.5px_rgba(87,1,218,0.08),0_8px_16px_-2px_rgba(87,1,218,0.04)] dark:shadow-none dark:border dark:border-[#5701da]/30",
                       )}
                     >
                       <GenerationsIndicator
@@ -4054,420 +4095,57 @@ export default function OverlayPage() {
                   )}
                 </AnimatePresence>
 
-                {/* Action buttons row */}
-                <div className="flex items-center gap-1">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "rounded-xl overflow-clip flex items-center",
-                        "shadow-[0_0_0_1px_rgba(50,50,50,0.12),0_4px_8px_-0.5px_rgba(50,50,50,0.04),0_8px_16px_-2px_rgba(50,50,50,0.02)]",
-                        "dark:shadow-none dark:border dark:border-border",
-                      )}
-                    >
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={undo}
-                        disabled={historyIndex <= 0}
-                        className="rounded-none"
-                        title="Desfazer"
-                      >
-                        <Undo className="h-4 w-4" />
-                      </Button>
-                      <div className="h-6 w-px bg-border" />
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={redo}
-                        disabled={historyIndex >= history.length - 1}
-                        className="rounded-none"
-                        title="Refazer"
-                      >
-                        <Redo className="h-4 w-4" strokeWidth={2} />
-                      </Button>
-                    </div>
-
-                    {/* Mode indicator badge */}
-                    <div
-                      className={cn(
-                        "h-9 rounded-xl overflow-clip flex items-center px-3",
-                        "pointer-events-none select-none",
-                        selectedIds.length > 0
-                          ? "bg-blue-500/10 dark:bg-blue-500/15 shadow-[0_0_0_1px_rgba(59,130,246,0.2),0_4px_8px_-0.5px_rgba(59,130,246,0.08),0_8px_16px_-2px_rgba(59,130,246,0.04)] dark:shadow-none dark:border dark:border-blue-500/30"
-                          : "bg-orange-500/10 dark:bg-orange-500/15 shadow-[0_0_0_1px_rgba(249,115,22,0.2),0_4px_8px_-0.5px_rgba(249,115,22,0.08),0_8px_16px_-2px_rgba(249,115,22,0.04)] dark:shadow-none dark:border dark:border-orange-500/30",
-                      )}
-                    >
-                      {selectedIds.length > 0 ? (
-                        <div className="flex items-center gap-2 text-xs font-medium">
-                          <ImageIcon className="w-4 h-4 text-blue-600 dark:text-blue-500" />
-                          <span className="text-blue-600 dark:text-blue-500">
-                            Imagem para Imagem
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-xs font-medium">
-                          <span className="text-orange-600 dark:text-orange-500 font-bold text-sm">
-                            T
-                          </span>
-                          <span className="text-orange-600 dark:text-orange-500">
-                            Texto para Imagem
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-2">
-                    {/* Clear button */}
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="secondary"
-                            size="icon-sm"
-                            onClick={async () => {
-                              if (
-                                confirm(
-                                  "Limpar todos os dados salvos? Esta ação não pode ser desfeita.",
-                                )
-                              ) {
-                                await canvasStorage.clearAll();
-                                setImages([]);
-                                setViewport({ x: 0, y: 0, scale: 1 });
-                                toast({
-                                  title: "Armazenamento limpo",
-                                  description:
-                                    "Todos os dados salvos foram removidos",
-                                });
-                              }
-                            }}
-                            className="bg-destructive/10 text-destructive hover:bg-destructive/20"
-                            title="Limpar armazenamento"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent className="text-destructive">
-                          <span>Limpar</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    {/* Settings dialog button */}
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="secondary"
-                            size="icon-sm"
-                            className="relative"
-                            onClick={() => setIsSettingsDialogOpen(true)}
-                          >
-                            <SlidersHorizontal className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <span>Configurações</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <Textarea
-                    value={generationSettings.prompt}
-                    onChange={(e) =>
-                      setGenerationSettings({
-                        ...generationSettings,
-                        prompt: e.target.value,
-                      })
+                <GenerationForm
+                  generationSettings={generationSettings}
+                  onPromptChange={(prompt) =>
+                    setGenerationSettings({ ...generationSettings, prompt })
+                  }
+                  hasImageToImage={imageToImage.hasSelectedImages}
+                  selectedImageSrc={imageToImage.selectedImage?.src}
+                  displayModelName={displayMediaModel?.name}
+                  displayModelIcon={displayMediaModel?.ui?.icon ?? undefined}
+                  displayModelImage={displayModelImage}
+                  selectedModel={selectedMediaModel as any}
+                  isModelsLoading={isModelsLoading}
+                  modelsError={modelsError}
+                  onOpenModelDialog={() => setIsModelDialogOpen(true)}
+                  onOpenModelParameters={(model) => {
+                    setSelectedModelForDetails(model as any);
+                    setIsModelDetailsDialogOpen(true);
+                  }}
+                  onRun={handleRun}
+                  onUndo={undo}
+                  onRedo={redo}
+                  onClear={async () => {
+                    if (
+                      confirm(
+                        "Limpar todos os dados salvos? Esta ação não pode ser desfeita.",
+                      )
+                    ) {
+                      await canvasStorage.clearAll();
+                      setImages([]);
+                      setViewport({ x: 0, y: 0, scale: 1 });
+                      toast({
+                        title: "Armazenamento limpo",
+                        description: "Todos os dados salvos foram removidos",
+                      });
                     }
-                    placeholder={`Digite um prompt... (${checkOS("Win") || checkOS("Linux") ? "Ctrl" : "⌘"}+Enter para executar)`}
-                    className="w-full h-20 resize-none border-none p-2 pr-36"
-                    style={{ fontSize: "16px" }}
-                    onKeyDown={(e) => {
-                      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                        e.preventDefault();
-                        if (!isGenerating && generationSettings.prompt.trim()) {
-                          handleRun();
-                        }
-                      }
-                    }}
-                  />
-
-                  {selectedIds.length > 0 && (
-                    <div className="absolute top-1 right-2 flex items-center justify-end">
-                      <div className="relative h-12 w-20">
-                        {selectedIds.slice(0, 3).map((id, index) => {
-                          const image = images.find((img) => img.id === id);
-                          if (!image) return null;
-
-                          const isLast =
-                            index === Math.min(selectedIds.length - 1, 2);
-                          const offset = index * 8;
-                          // Make each card progressively smaller
-                          const size = 40 - index * 4;
-                          const topOffset = index * 2; // Offset from top to maintain visual alignment
-
-                          return (
-                            <div
-                              key={id}
-                              className="absolute rounded-lg border border-border/20 bg-background overflow-hidden"
-                              style={{
-                                right: `${offset}px`,
-                                top: `${topOffset}px`,
-                                zIndex: 3 - index,
-                                width: `${size}px`,
-                                height: `${size}px`,
-                              }}
-                            >
-                              <img
-                                src={image.src}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                              {/* Show count on last visible card if more than 3 selected */}
-                              {isLast && selectedIds.length > 3 && (
-                                <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                                  <span className="text-white text-xs font-medium">
-                                    +{selectedIds.length - 3}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Style dropdown and Run button */}
-                <div className="flex items-center justify-between">
-                  {/* Style selector button */}
-                  <Button
-                    variant="secondary"
-                    className="flex items-center gap-2"
-                    onClick={() => setIsModelDialogOpen(true)}
-                  >
-                    {(() => {
-                      if (isModelsLoading) {
-                        return (
-                          <>
-                            <SpinnerIcon className="h-4 w-4 animate-spin" />
-                            <span className="text-sm">Loading models...</span>
-                          </>
-                        );
-                      }
-
-                      if (modelsError) {
-                        return (
-                          <>
-                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-destructive/20 text-[10px] font-medium uppercase text-destructive">
-                              !
-                            </div>
-                            <span className="text-sm">
-                              Failed to load models
-                            </span>
-                          </>
-                        );
-                      }
-
-                      const model = displayMediaModel;
-
-                      if (!model) {
-                        return (
-                          <>
-                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-muted text-[10px] font-medium uppercase text-muted-foreground">
-                              N/A
-                            </div>
-                            <span className="text-sm">Select a model</span>
-                          </>
-                        );
-                      }
-
-                      const artwork = model.ui?.image || model.ui?.icon;
-                      const shouldRenderArtwork = isRenderableMediaUrl(artwork);
-                      const artworkUrl = shouldRenderArtwork
-                        ? (artwork as string)
-                        : "";
-
-                      return (
-                        <>
-                          {shouldRenderArtwork ? (
-                            isVideoAsset(artworkUrl) ? (
-                              <video
-                                src={artworkUrl}
-                                className="w-5 h-5 rounded-xl object-cover"
-                                autoPlay
-                                loop
-                                muted
-                                playsInline
-                              />
-                            ) : (
-                              <img
-                                src={artworkUrl}
-                                alt={model.name}
-                                className="w-5 h-5 rounded-xl object-cover"
-                              />
-                            )
-                          ) : (
-                            <div className="w-5 h-5 flex items-center justify-center rounded-xl bg-muted text-[10px] font-medium uppercase text-muted-foreground">
-                              {model.name.slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="text-sm">{model.name}</span>
-                        </>
-                      );
-                    })()}
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                  {/* Model options button */}
-                  <ModelParametersButton
-                    model={selectedMediaModel as any}
-                    onOpenParameters={(model) => {
-                      setSelectedModelForDetails(model as any);
-                      setIsModelDetailsDialogOpen(true);
-                    }}
-                  />
-                  <div className="flex items-center gap-2">
-                    {/* Attachment button */}
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="border-none"
-                            onClick={() => {
-                              // Create file input with better mobile support
-                              const input = document.createElement("input");
-                              input.type = "file";
-                              input.accept = "image/*";
-                              input.multiple = true;
-
-                              // Add to DOM for mobile compatibility
-                              input.style.position = "fixed";
-                              input.style.top = "-1000px";
-                              input.style.left = "-1000px";
-                              input.style.opacity = "0";
-                              input.style.pointerEvents = "none";
-                              input.style.width = "1px";
-                              input.style.height = "1px";
-
-                              // Add event handlers
-                              input.onchange = (e) => {
-                                try {
-                                  handleFileUpload(
-                                    (e.target as HTMLInputElement).files,
-                                  );
-                                } catch (error) {
-                                  console.error("File upload error:", error);
-                                  toast({
-                                    title: "Falha no envio",
-                                    description:
-                                      "Falha ao processar arquivos selecionados",
-                                    variant: "destructive",
-                                  });
-                                } finally {
-                                  // Clean up
-                                  if (input.parentNode) {
-                                    document.body.removeChild(input);
-                                  }
-                                }
-                              };
-
-                              input.onerror = () => {
-                                console.error("File input error");
-                                if (input.parentNode) {
-                                  document.body.removeChild(input);
-                                }
-                              };
-
-                              // Add to DOM and trigger
-                              document.body.appendChild(input);
-
-                              // Use setTimeout to ensure the input is properly attached
-                              setTimeout(() => {
-                                try {
-                                  input.click();
-                                } catch (error) {
-                                  console.error(
-                                    "Failed to trigger file dialog:",
-                                    error,
-                                  );
-                                  toast({
-                                    title: "Envio indisponível",
-                                    description:
-                                      "O envio de arquivos não está disponível. Tente usar arrastar e soltar.",
-                                    variant: "destructive",
-                                  });
-                                  if (input.parentNode) {
-                                    document.body.removeChild(input);
-                                  }
-                                }
-                              }, 10);
-
-                              // Cleanup after timeout in case dialog was cancelled
-                              setTimeout(() => {
-                                if (input.parentNode) {
-                                  document.body.removeChild(input);
-                                }
-                              }, 30000); // 30 second cleanup
-                            }}
-                            title="Enviar imagens"
-                          >
-                            <Paperclip className="h-4 w-4" />
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <span>Enviar</span>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    {/* Run button */}
-                    <TooltipProvider>
-                      <Tooltip delayDuration={0}>
-                        <TooltipTrigger asChild>
-                          <Button
-                            onClick={handleRun}
-                            variant="primary"
-                            size="icon"
-                            disabled={
-                              isGenerating || !generationSettings.prompt.trim()
-                            }
-                            className={cn(
-                              "gap-2 font-medium transition-all",
-                              isGenerating && "bg-secondary",
-                            )}
-                          >
-                            {isGenerating ? (
-                              <SpinnerIcon className="h-4 w-4 animate-spin text-white" />
-                            ) : (
-                              <PlayIcon className="h-4 w-4 text-white fill-white" />
-                            )}
-                          </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="flex items-center gap-2">
-                            <span>Executar</span>
-                            <ShortcutBadge
-                              variant="default"
-                              size="xs"
-                              shortcut={
-                                checkOS("Win") || checkOS("Linux")
-                                  ? "ctrl+enter"
-                                  : "meta+enter"
-                              }
-                            />
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                </div>
+                  }}
+                  onOpenSettings={() => setIsSettingsDialogOpen(true)}
+                  onFilesSelected={handleFileUpload}
+                  onFileUploadError={(error) => {
+                    toast({
+                      title: "Falha no envio",
+                      description:
+                        error.message ||
+                        "Falha ao processar arquivos selecionados",
+                      variant: "destructive",
+                    });
+                  }}
+                  activeGenerationsSize={activeGenerations.size}
+                  canUndo={historyIndex > 0}
+                  canRedo={historyIndex < history.length - 1}
+                />
               </div>
             </div>
           </div>

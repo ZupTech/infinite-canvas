@@ -23,11 +23,12 @@ import {
 } from "lucide-react";
 import { SpinnerIcon } from "@/components/icons";
 import type { PlacedImage, GenerationSettings } from "@/types/canvas";
+import { MAX_CONCURRENT_GENERATIONS } from "@/utils/constants";
 
 interface MobileToolbarProps {
   selectedIds: string[];
   images: PlacedImage[];
-  isGenerating: boolean;
+  activeGenerationsSize: number;
   generationSettings: GenerationSettings;
   handleRun: () => void;
   handleDuplicate: () => void;
@@ -44,7 +45,7 @@ interface MobileToolbarProps {
 export const MobileToolbar: React.FC<MobileToolbarProps> = ({
   selectedIds,
   images,
-  isGenerating,
+  activeGenerationsSize,
   generationSettings,
   handleRun,
   handleDuplicate,
@@ -73,15 +74,14 @@ export const MobileToolbar: React.FC<MobileToolbarProps> = ({
         variant="secondary"
         size="sm"
         onClick={handleRun}
-        disabled={isGenerating || !generationSettings.prompt.trim()}
+        disabled={
+          activeGenerationsSize >= MAX_CONCURRENT_GENERATIONS ||
+          !generationSettings.prompt.trim()
+        }
         className="w-12 h-12 p-0"
         title="Executar"
       >
-        {isGenerating ? (
-          <SpinnerIcon className="h-12 w-12 animate-spin text-content" />
-        ) : (
-          <Play className="h-12 w-12 text-content" />
-        )}
+        <Play className="h-12 w-12 text-content" />
       </Button>
 
       <Button
