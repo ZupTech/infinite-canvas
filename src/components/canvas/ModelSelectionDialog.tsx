@@ -6,7 +6,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { Plus, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpinnerIcon } from "@/components/icons";
 import { filterModelsForContext, type MediaModel } from "@/utils/model-utils";
@@ -20,7 +20,6 @@ interface ModelSelectionDialogProps {
   isLoading: boolean;
   error: string | null;
   onModelSelect: (modelId: string) => void;
-  onCustomSelect: () => void;
 }
 
 const isVideoAsset = (value?: string | null): boolean =>
@@ -32,6 +31,16 @@ const isRenderableMediaUrl = (value?: string | null): boolean =>
     value.startsWith("https://") ||
     value.startsWith("/"));
 
+// IDs and types that should not appear in the model selection dialog
+const HIDDEN_MODEL_IDS = [
+  "ideogram_v3_reframe",
+  "face_swap",
+  "ideogram_character",
+  "flux_dev_lora",
+  "flux_kontext_portrait_series",
+];
+const HIDDEN_MODEL_TYPES = ["upscale", "video"];
+
 export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
   open,
   onOpenChange,
@@ -41,13 +50,19 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
   isLoading,
   error,
   onModelSelect,
-  onCustomSelect,
 }) => {
-  // Filter models based on context
-  const filteredModels = useMemo(
-    () => filterModelsForContext(models, hasSelectedImages),
-    [models, hasSelectedImages],
-  );
+  // Filter models based on context and exclude hidden models
+  const filteredModels = useMemo(() => {
+    const contextFilteredModels = filterModelsForContext(
+      models,
+      hasSelectedImages,
+    );
+    return contextFilteredModels.filter(
+      (model) =>
+        !HIDDEN_MODEL_IDS.includes(model.id) &&
+        !HIDDEN_MODEL_TYPES.includes(model.type),
+    );
+  }, [models, hasSelectedImages]);
 
   const dialogTitle = hasSelectedImages
     ? "Escolher Modelo para Editar Imagem"
@@ -55,7 +70,7 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
 
   const dialogDescription = hasSelectedImages
     ? "Selecione um modelo para transformar sua imagem selecionada"
-    : "Selecione um modelo para gerar imagens ou escolha Personalizado para usar sua própria LoRA";
+    : "Selecione um modelo para gerar imagens";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,24 +88,6 @@ export const ModelSelectionDialog: React.FC<ModelSelectionDialogProps> = ({
           {/* Scrollable content */}
           <div className="overflow-y-auto max-h-[60vh] px-1">
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 pt-4 pb-6 md:pt-8 md:pb-12">
-              {/* Custom option - only show when no image selected */}
-              {!hasSelectedImages && (
-                <button
-                  onClick={onCustomSelect}
-                  className={cn(
-                    "group relative flex flex-col items-center gap-2 p-3 rounded-xl border",
-                    selectedModelId === "custom"
-                      ? "border-primary bg-primary/10"
-                      : "border-border hover:border-primary/50",
-                  )}
-                >
-                  <div className="w-full aspect-square rounded-lg bg-muted flex items-center justify-center">
-                    <Plus className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                  <span className="text-sm font-medium">Personalizado</span>
-                </button>
-              )}
-
               {isLoading ? (
                 <div className="col-span-full flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                   <SpinnerIcon className="h-4 w-4 animate-spin" />
