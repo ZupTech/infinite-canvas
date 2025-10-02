@@ -461,6 +461,10 @@ export default function OverlayPage() {
                 ? settings.seed
                 : undefined,
           sourceImageId: selectedImageForVideo,
+          sourceImageX: image.x,
+          sourceImageY: image.y,
+          sourceImageWidth: image.width,
+          sourceImageHeight: image.height,
           status: "queued",
         });
         return newMap;
@@ -929,10 +933,29 @@ export default function OverlayPage() {
       // Find the original image if this was an image-to-video conversion
       if (sourceImageId) {
         const image = images.find((img) => img.id === sourceImageId);
-        if (image) {
+
+        // Use saved image info if image no longer exists
+        const imageInfo =
+          image ||
+          (generation?.sourceImageX !== undefined &&
+          generation?.sourceImageY !== undefined &&
+          generation?.sourceImageWidth !== undefined &&
+          generation?.sourceImageHeight !== undefined
+            ? {
+                id: sourceImageId,
+                src: "",
+                x: generation.sourceImageX,
+                y: generation.sourceImageY,
+                width: generation.sourceImageWidth,
+                height: generation.sourceImageHeight,
+                rotation: 0,
+              }
+            : null);
+
+        if (imageInfo) {
           // Create a video element based on the original image
           const video = convertImageToVideo(
-            image,
+            imageInfo,
             videoUrl,
             duration,
             false, // Don't replace the original image
@@ -940,8 +963,8 @@ export default function OverlayPage() {
 
           // Position the video to the right of the source image
           // Add a small gap between the image and video (20px)
-          video.x = image.x + image.width + 20;
-          video.y = image.y; // Keep the same vertical position
+          video.x = imageInfo.x + imageInfo.width + 20;
+          video.y = imageInfo.y; // Keep the same vertical position
 
           // Add the video to the videos state
           setVideos((prev) => [
@@ -953,16 +976,22 @@ export default function OverlayPage() {
           saveToHistory();
 
           // Show success toast
+          const wasImageDeleted = !image;
           toast({
             title: "Vídeo criado com sucesso",
-            description:
-              "O vídeo foi adicionado à direita da imagem de origem.",
+            description: wasImageDeleted
+              ? "O vídeo foi adicionado ao canvas (a imagem de origem foi removida)."
+              : "O vídeo foi adicionado à direita da imagem de origem.",
           });
         } else {
-          console.error("Source image not found:", sourceImageId);
+          console.error(
+            "Source image not found and no saved position info:",
+            sourceImageId,
+          );
           toast({
             title: "Erro ao criar vídeo",
-            description: "A imagem de origem não foi encontrada.",
+            description:
+              "A imagem de origem não foi encontrada e não foi possível recuperar a posição.",
             variant: "destructive",
           });
         }
