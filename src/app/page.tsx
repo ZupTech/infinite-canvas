@@ -93,6 +93,7 @@ import { MiniMap } from "@/components/canvas/MiniMap";
 import { ZoomControls } from "@/components/canvas/ZoomControls";
 import { MobileToolbar } from "@/components/canvas/MobileToolbar";
 import { PoweredByUniteBadge } from "@/components/canvas/PoweredByUniteBadge";
+import { BrandLogo } from "@/components/canvas/BrandLogo";
 import { CanvasContextMenu } from "@/components/canvas/CanvasContextMenu";
 import { useTheme } from "next-themes";
 import { VideoOverlays } from "@/components/canvas/VideoOverlays";
@@ -3994,24 +3995,12 @@ export default function OverlayPage() {
           </ContextMenu>
 
           <div className="absolute top-4 left-4 z-20 flex flex-col items-start gap-2">
-            {/* Unite logo */}
-            <div className="md:hidden py-2 px-3 flex flex-row gap-2 items-center">
-              <Link
-                href="https://unite.ai"
-                target="_blank"
-                className="block transition-opacity"
-              >
-                <img
-                  src={
-                    mounted && theme === "dark"
-                      ? "https://storage.googleapis.com/unite_assets/logos/Unite%20Logo%20Negativo.png"
-                      : "https://cdn.prod.website-files.com/686549176db3fc9e575ae4b7/68654b105d4af13cbebc5bf4_Logo%20Positivo%20Unite.png"
-                  }
-                  alt="Unite logo"
-                  className="h-8 w-auto"
-                />
-              </Link>
-            </div>
+            {/* Brand logo mobile */}
+            <BrandLogo
+              className="md:hidden py-2 px-3 flex flex-row gap-2 items-center"
+              imgClassName="h-8 w-auto"
+              mobile
+            />
 
             {/* Mobile tool icons - animated based on selection */}
             <MobileToolbar
