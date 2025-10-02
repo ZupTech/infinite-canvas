@@ -227,7 +227,7 @@ export const BRAND_CONFIGS: Record<BrandId, BrandConfig> = {
 /**
  * 🔍 Configuração padrão (fallback)
  */
-export const DEFAULT_BRAND: BrandId = "unite";
+export const DEFAULT_BRAND: BrandId = "cflab";
 
 /**
  * 🌐 Mapeamento de domínios para brands
@@ -269,9 +269,6 @@ export function isOverrideAllowedForHostname(hostname: string): boolean {
     .split("/")[0] // Pegar apenas o domínio, não o path
     .split(":")[0]; // Remover porta se houver
 
-  return BRAND_OVERRIDE_ALLOWED_DOMAINS.some(
-    (allowedDomain) =>
-      normalizedHostname.includes(allowedDomain) ||
-      allowedDomain.includes(normalizedHostname),
-  );
+  // Verificar se o hostname corresponde exatamente a algum domínio permitido
+  return BRAND_OVERRIDE_ALLOWED_DOMAINS.includes(normalizedHostname);
 }
