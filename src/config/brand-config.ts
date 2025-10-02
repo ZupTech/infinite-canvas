@@ -80,16 +80,17 @@ export const BRAND_CONFIGS: Record<BrandId, BrandConfig> = {
     baseDomain: "cflab.ai",
     dominio_alternativo: "https://www.cflab.ai",
     logo: {
-      light: "https://train.cflab.ai/cflab_simbolo.svg", // TODO: Adicionar logo modo claro
-      dark: "https://train.cflab.ai/cflab_simbolo.svg",
+      light:
+        "https://storage.googleapis.com/unite_assets/logos/cflab_light_logo.png",
+      dark: "https://storage.googleapis.com/unite_assets/logos/cflab_dark_logo.png",
       alt: "cflab.ai",
       width: 150,
       height: 100,
     },
     icon: {
       light:
-        "https://storage.googleapis.com/unite_assets/cfLab/assets/logo-cflabAi.svg",
-      dark: "https://storage.googleapis.com/unite_assets/cfLab/assets/logo-cflabAi.svg",
+        "https://storage.googleapis.com/unite_assets/logos/cflab_light_logo.png",
+      dark: "https://storage.googleapis.com/unite_assets/logos/cflab_dark_logo.png",
       mobileSrc:
         "https://storage.googleapis.com/unite_assets/cfLab/assets/logo-cflab.svg",
       alt: "cflab.ai",
