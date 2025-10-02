@@ -84,6 +84,10 @@ export interface ActiveVideoGeneration {
   cameraFixed?: boolean; // Whether to fix the camera position
   seed?: number; // Random seed to control video generation
   sourceImageId?: string; // ID of the image used for img2vid
+  sourceImageX?: number; // X position of source image
+  sourceImageY?: number; // Y position of source image
+  sourceImageWidth?: number; // Width of source image
+  sourceImageHeight?: number; // Height of source image
   sourceVideoId?: string; // ID of the video used for vid2vid
   isVideoToVideo?: boolean; // Indicates if this is a video-to-video transformation
   isVideoExtension?: boolean; // Indicates if this is a video extension
