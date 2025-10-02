@@ -4,93 +4,16 @@ import { CoreProviders } from "./core-providers";
 import { focal, hal, halMono, commitMono, inconsolata } from "@/lib/fonts";
 import { BotIdClient } from "botid/client";
 import { Analytics } from "@vercel/analytics/next";
+import { headers } from "next/headers";
+import { generateBrandMetadataFromHeaders } from "@/lib/metadata";
 
-const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-export const metadata: Metadata = {
-  title: {
-    default: "Infinite Canvas - AI Style Transfer",
-    template: "%s | Infinite Canvas",
-  },
-  description:
-    "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles including anime, oil painting, cyberpunk, and more.",
-  keywords: [
-    "AI style transfer",
-    "image transformation",
-    "flux model",
-    "LoRA",
-    "AI art",
-    "AI canvas",
-    "photo styling",
-    "artificial intelligence",
-    "machine learning",
-    "image generation",
-  ],
-  authors: [{ name: "Unite" }],
-  creator: "Unite",
-  publisher: "Unite",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    viewportFit: "cover",
-  },
-  formatDetection: {
-    email: false,
-    address: false,
-    telephone: false,
-  },
-  metadataBase: appUrl ? new URL(appUrl) : undefined,
-  alternates: {
-    canonical: "/",
-  },
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: "/",
-    title: "Infinite Canvas - AI Style Transfer",
-    description:
-      "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles.",
-    siteName: "Flux Kontext Dev",
-    images: [
-      {
-        url: "/og-img-compress.png",
-        width: 1200,
-        height: 630,
-        alt: "Flux Kontext Dev - AI Style Transfer Demo",
-        type: "image/png",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Infinite Canvas - AI Style Transfer",
-    description:
-      "Transform your photos with AI-powered style transfer in seconds. Choose from LoRA models and prompt-based styles.",
-    creator: "@fal_ai",
-    site: "@fal_ai",
-    images: [
-      {
-        url: "/og-img-compress.png",
-        width: 1200,
-        height: 630,
-        alt: "Flux Kontext Dev - AI Style Transfer Demo",
-        type: "image/png",
-      },
-    ],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-video-preview": -1,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-    },
-  },
-};
+/**
+ * Gera metadata dinâmica baseada no domínio da requisição
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  return generateBrandMetadataFromHeaders(headersList);
+}
 
 export default function RootLayout({
   children,

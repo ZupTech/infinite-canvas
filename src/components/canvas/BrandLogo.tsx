@@ -4,7 +4,17 @@ import { useTheme } from "next-themes";
 import { useBrand } from "@/components/BrandProvider";
 import { BrandSelector } from "./BrandSelector";
 
-export const PoweredByUniteBadge: React.FC = () => {
+interface BrandLogoProps {
+  className?: string;
+  imgClassName?: string;
+  mobile?: boolean;
+}
+
+export const BrandLogo: React.FC<BrandLogoProps> = ({
+  className = "",
+  imgClassName = "h-8 w-auto",
+  mobile = false,
+}) => {
   const { resolvedTheme } = useTheme();
   const { config, isLoading: isBrandLoading } = useBrand();
   const [mounted, setMounted] = useState(false);
@@ -18,23 +28,23 @@ export const PoweredByUniteBadge: React.FC = () => {
   const logoUrl =
     mounted && !isBrandLoading
       ? resolvedTheme === "dark"
-        ? config.logo.dark
-        : config.logo.light
-      : config.logo.dark; // Fallback para dark
+        ? config.icon.dark
+        : config.icon.light
+      : config.icon.dark; // Fallback para dark
 
   const brandUrl = `https://www.${config.baseDomain}`;
 
   return (
-    <div className="absolute top-4 left-4 z-20 hidden md:flex md:flex-row md:items-center md:gap-3">
+    <div className={className}>
       <Link
         href={brandUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="p-2 flex flex-row items-center"
+        className="block transition-opacity"
       >
-        <img src={logoUrl} alt={config.logo.alt} className="h-9 w-auto" />
+        <img src={logoUrl} alt={config.icon.alt} className={imgClassName} />
       </Link>
-      <BrandSelector />
+      {mobile && <BrandSelector />}
     </div>
   );
 };
